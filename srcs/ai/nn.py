@@ -17,6 +17,7 @@ class ActFunc(enum.IntEnum):
     Identity = 1,
     Sigmoid = 2,
     Relu = 3,
+    Tanh = 4,
 
 def identity(x):
     return x
@@ -39,6 +40,12 @@ def relu_derivative(activated):
     tmp[activated <= 0] = 0
     return tmp
 
+def tanh(x):
+    return (numpy.exp(x) - numpy.exp(-x)) / (numpy.exp(x) + numpy.exp(-x))
+
+def tanh_derivative(activated):
+    return 1 - numpy.square(activated)
+
 def apply_activation(x, act_func):
     if act_func == ActFunc.Identity:
         return identity(x)
@@ -46,6 +53,8 @@ def apply_activation(x, act_func):
         return sigmoid(x)
     if act_func == ActFunc.Relu:
         return relu(x)
+    if act_func == ActFunc.Tanh:
+        return tanh(x)
 
 def apply_activation_derivative(x, act_func):
     if act_func == ActFunc.Identity:
@@ -54,6 +63,8 @@ def apply_activation_derivative(x, act_func):
         return sigmoid_derivative(x)
     if act_func == ActFunc.Relu:
         return relu_derivative(x)
+    if act_func == ActFunc.Tanh:
+        return tanh_derivative(x)
 
 # Layer of Neural Network.
 
