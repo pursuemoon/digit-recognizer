@@ -77,40 +77,36 @@ class Layer(object):
         if random_seed:
             numpy.random.seed(random_seed)
 
-        if weights is not None:
-            assert input_dim == weights.shape[0], "weights.shape[0] must be equal to input_dim"
-            assert output_dim == weights.shape[1], "weights.shape[1] must be equal to output_dim"
-            self.weights = weights
-        else:
-            # 1. Self Defined Initialization
-            # self.weights = numpy.random.randn(input_dim, output_dim) / numpy.sqrt(input_dim + output_dim)
-
-            # 2. Xavier Uniform Initialization
-            # limit = numpy.sqrt(6 / (input_dim + output_dim))
-            # self.weights = numpy.random.uniform(-limit, limit, size=(input_dim, output_dim))
-
-            # 3. Xavier Normal Initialization
-            self.weights = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=(input_dim, output_dim))
-
-        if bias is not None:
-            assert output_dim == bias.shape[0], "bias.shape[0] must be equal to output_dim"
-            self.bias = bias
-        else:
-            # 1. Zero Initialization
-            # self.bias = numpy.zeros((output_dim), dtype=numpy.float64) 
-
-            # 2. Xavier Uniform Initialization
-            # limit = numpy.sqrt(6 / (input_dim + output_dim))
-            # self.bias = numpy.random.uniform(-limit, limit, size=output_dim)
-
-            # 3. Xavier Normal Initialization
-            self.bias = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=output_dim)
-
         if act_func is not None:
             assert isinstance(act_func, ActFunc), "act_func must be of enumeration type of ActFunc"
             self.act_func = act_func
         else:
             self.act_func = ActFunc.Identity
+
+        xavier_gain = 1 / apply_activation_derivative(apply_activation(0, self.act_func), self.act_func)
+
+        if weights is not None:
+            assert input_dim == weights.shape[0], "weights.shape[0] must be equal to input_dim"
+            assert output_dim == weights.shape[1], "weights.shape[1] must be equal to output_dim"
+            self.weights = weights
+        else:
+            # 1. Xavier Uniform Initialization
+            # limit = numpy.sqrt(6 / (input_dim + output_dim))
+            # self.weights = numpy.random.uniform(-limit, limit, size=(input_dim, output_dim)) * xavier_gain
+
+            # 2. Xavier Normal Initialization
+            self.weights = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=(input_dim, output_dim)) * xavier_gain
+
+        if bias is not None:
+            assert output_dim == bias.shape[0], "bias.shape[0] must be equal to output_dim"
+            self.bias = bias
+        else:
+            # 1. Xavier Uniform Initialization
+            # limit = numpy.sqrt(6 / (input_dim + output_dim))
+            # self.bias = numpy.random.uniform(-limit, limit, size=output_dim) * xavier_gain
+
+            # 2. Xavier Normal Initialization
+            self.bias = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=output_dim) * xavier_gain
 
         self.output = None
         self.error = None
