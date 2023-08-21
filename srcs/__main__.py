@@ -56,16 +56,19 @@ if __name__ == "__main__":
 
     logger.info("Building neural network...")
 
-    # network = nn.Network(random_seed=1964)
-    # network.add_layer(nn.Layer(28 * 28, 64, nn.ActFunc.Sigmoid))
-    # network.add_layer(nn.Layer(64, 32, nn.ActFunc.Sigmoid))
-    # network.add_layer(nn.Layer(32, 10, nn.ActFunc.Sigmoid))
-    # network.train(normalize(train_images), train_labels, 0.1, 10)
-    # network.save_as_file()
+    network = nn.Network(random_seed=1964)
+    network.add_layer(nn.Layer(28 * 28, 64, nn.ActFunc.Sigmoid))
+    network.add_layer(nn.Layer(64, 10, nn.ActFunc.Sigmoid))
 
-    network = nn.Network()
-    network.load_from_file('2023-08-17_00-34-56.npz')
-    network.train(normalize(train_images), train_labels, 0.1, 10)
+    # network = nn.Network()
+    # network.load_from_file('2023-08-17_00-34-56.npz')
+
+    kwargs = {
+        'print_mse': False,
+        'print_var': True,
+    }
+    network.train(normalize(train_images), train_labels, 0.1, 5, **kwargs)
+    # network.save_as_file()
 
     logger.info("Loading test data...")
     test_labels = load_labels(test_label_path, 10000)

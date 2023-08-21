@@ -136,6 +136,18 @@ class Layer(object):
         self.weights -= learning_rate * numpy.atleast_2d(layer_input).T * self.delta
         self.bias -= learning_rate * self.delta
 
+    def get_weights_std(self):
+        return numpy.std(self.weights)
+
+    def get_weights_var(self):
+        return numpy.var(self.weights)
+
+    def get_bias_std(self):
+        return numpy.std(self.bias)
+
+    def get_bias_var(self):
+        return numpy.var(self.bias)
+
 
 class Network(object):
     def __init__(self, random_seed=None):
@@ -163,7 +175,7 @@ class Network(object):
         self.is_being_stoped = True
         logger.info('Training is being early stoped.')
 
-    def train(self, x_train, y_train, learning_rate, max_epoch):
+    def train(self, x_train, y_train, learning_rate, max_epoch, **kwargs):
         self.__validate(x_train.shape[1])
         assert len(x_train) == len(y_train), "length of y_train must be equal to length of x_train"
         assert learning_rate > 0, "learning rate must be greater than 0"
@@ -178,6 +190,10 @@ class Network(object):
 
         y_onehot = numpy.zeros((len(x_train), self.layers[layer_size - 1].output_dim), numpy.float64)
         y_onehot[numpy.arange(len(y_train)), y_train] = 1
+
+        print_mod = kwargs['print_mod'] if 'print_mod' in kwargs else 5000
+        print_mse = kwargs['print_mse'] if 'print_mse' in kwargs else False
+        print_var = kwargs['print_var'] if 'print_var' in kwargs else False
 
         for i in range(max_epoch):
             if self.is_being_stoped:
@@ -205,14 +221,22 @@ class Network(object):
                     # Update parameters.
                     self.layers[k].update_parameters(learning_rate, last_layer, origin_input)
 
-                if j % 3000 == 2999:
-                    mse = numpy.mean(numpy.square(self.layers[layer_size - 1].output - y_onehot[j]))
-                    total_cnt = max_epoch * len(x_train)
-                    current_cnt = i * len(x_train) + (j + 1)
-                    used_time = time.time() - start_time
-                    need_time = used_time / current_cnt * total_cnt - used_time
+                if print_mod > 0 and j % print_mod == (print_mod - 1):
                     with numpy.printoptions(linewidth=numpy.inf):
-                        logger.debug("epoch={}, index={}, mse={}, need_time={}".format(i + 1, j + 1, mse, human_readable_time(need_time)))
+                        total_cnt = max_epoch * len(x_train)
+                        current_cnt = i * len(x_train) + (j + 1)
+                        used_time = time.time() - start_time
+                        need_time = used_time / current_cnt * total_cnt - used_time
+                        logger.debug("epoch={}, index={}, ct={}".format(i + 1, j + 1, human_readable_time(need_time)))
+
+                        if print_mse:
+                            mse = numpy.mean(numpy.square(self.layers[layer_size - 1].output - y_onehot[j]))
+                            logger.debug("-- mse={}".format(mse))
+
+                        if print_var:
+                            weights_var = [layer.get_weights_var() for layer in self.layers]
+                            bias_var = [layer.get_bias_var() for layer in self.layers]
+                            logger.debug("-- weights_var={}, bias_var={}".format(weights_var, bias_var))
 
                 if self.is_being_stoped:
                     break
