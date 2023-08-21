@@ -41,7 +41,8 @@ def relu_derivative(activated):
     return tmp
 
 def tanh(x):
-    return (numpy.exp(x) - numpy.exp(-x)) / (numpy.exp(x) + numpy.exp(-x))
+    # original formula: tanh(x) = (numpy.exp(x) - numpy.exp(-x)) / (numpy.exp(x) + numpy.exp(-x))
+    return numpy.tanh(x)
 
 def tanh_derivative(activated):
     return 1 - numpy.square(activated)
@@ -84,11 +85,11 @@ class Layer(object):
             # 1. Self Defined Initialization
             # self.weights = numpy.random.randn(input_dim, output_dim) / numpy.sqrt(input_dim + output_dim)
 
-            # 2. Xavier Initialization I.
+            # 2. Xavier Uniform Initialization
             # limit = numpy.sqrt(6 / (input_dim + output_dim))
             # self.weights = numpy.random.uniform(-limit, limit, size=(input_dim, output_dim))
 
-            # 3. Xavier Initializatioin II.
+            # 3. Xavier Normal Initialization
             self.weights = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=(input_dim, output_dim))
 
         if bias is not None:
@@ -98,11 +99,11 @@ class Layer(object):
             # 1. Zero Initialization
             # self.bias = numpy.zeros((output_dim), dtype=numpy.float64) 
 
-            # 2. Xavier Initializatioin I.
+            # 2. Xavier Uniform Initialization
             # limit = numpy.sqrt(6 / (input_dim + output_dim))
             # self.bias = numpy.random.uniform(-limit, limit, size=output_dim)
 
-            # 3. Xavier Initializatioin II.
+            # 3. Xavier Normal Initialization
             self.bias = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=output_dim)
 
         if act_func is not None:
