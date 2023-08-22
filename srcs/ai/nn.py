@@ -30,7 +30,10 @@ class Layer(object):
         else:
             self.act_func = ActFunc.Identity
 
-        xavier_gain = 1 / apply_activation_derivative(apply_activation(0, self.act_func), self.act_func)
+        d_0 = apply_activation_derivative(apply_activation(0, self.act_func), self.act_func)
+        xavier_gain = numpy.sqrt(2) if d_0 == 0 else 1 / d_0
+
+        # xavier_gain = 1 if d_0 == 0 else 1 / apply_activation_derivative(d_0, self.act_func)
 
         if weights is not None:
             assert input_dim == weights.shape[0], "weights.shape[0] must be equal to input_dim"
@@ -80,17 +83,11 @@ class Layer(object):
         self.weights -= learning_rate * numpy.atleast_2d(layer_input).T * self.delta
         self.bias -= learning_rate * self.delta
 
-    def get_weights_std(self):
-        return numpy.std(self.weights)
+    def get_output_std(self):
+        return numpy.std(self.output)
 
-    def get_weights_var(self):
-        return numpy.var(self.weights)
-
-    def get_bias_std(self):
-        return numpy.std(self.bias)
-
-    def get_bias_var(self):
-        return numpy.var(self.bias)
+    def get_output_var(self):
+        return numpy.var(self.output)
 
 
 # Neural Network.
@@ -180,9 +177,8 @@ class Network(object):
                             logger.debug("-- mse={}".format(mse))
 
                         if print_var:
-                            weights_var = [layer.get_weights_var() for layer in self.layers]
-                            bias_var = [layer.get_bias_var() for layer in self.layers]
-                            logger.debug("-- weights_var={}, bias_var={}".format(weights_var, bias_var))
+                            output_var = [layer.get_output_var() for layer in self.layers]
+                            logger.debug("-- output_var={}".format(output_var))
 
                 if self.is_being_stoped:
                     break
