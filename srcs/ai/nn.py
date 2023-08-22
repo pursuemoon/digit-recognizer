@@ -11,61 +11,8 @@ from utils.env import Env
 from utils.time import human_readable_time
 from utils.file import prepare_directory
 
-# Activation Functions
+from ai.calc import apply_activation, apply_activation_derivative, ActFunc
 
-class ActFunc(enum.IntEnum):
-    Identity = 1,
-    Sigmoid = 2,
-    Relu = 3,
-    Tanh = 4,
-
-def identity(x):
-    return x
-
-def identity_derivative(activated):
-    return numpy.ones_like(activated)
-
-def sigmoid(x):
-    return 1 / (1 + numpy.exp(-x))
-
-def sigmoid_derivative(activated):
-    return activated * (1 - activated)
-
-def relu(x):
-    return numpy.maximum(0, x)
-
-def relu_derivative(activated):
-    tmp = numpy.copy(activated)
-    tmp[activated > 0] = 1
-    tmp[activated <= 0] = 0
-    return tmp
-
-def tanh(x):
-    # original formula: tanh(x) = (numpy.exp(x) - numpy.exp(-x)) / (numpy.exp(x) + numpy.exp(-x))
-    return numpy.tanh(x)
-
-def tanh_derivative(activated):
-    return 1 - numpy.square(activated)
-
-def apply_activation(x, act_func):
-    if act_func == ActFunc.Identity:
-        return identity(x)
-    if act_func == ActFunc.Sigmoid:
-        return sigmoid(x)
-    if act_func == ActFunc.Relu:
-        return relu(x)
-    if act_func == ActFunc.Tanh:
-        return tanh(x)
-
-def apply_activation_derivative(x, act_func):
-    if act_func == ActFunc.Identity:
-        return identity_derivative(x)
-    if act_func == ActFunc.Sigmoid:
-        return sigmoid_derivative(x)
-    if act_func == ActFunc.Relu:
-        return relu_derivative(x)
-    if act_func == ActFunc.Tanh:
-        return tanh_derivative(x)
 
 # Layer of Neural Network.
 
@@ -146,6 +93,8 @@ class Layer(object):
         return numpy.var(self.bias)
 
 
+# Neural Network.
+
 class Network(object):
     def __init__(self, random_seed=None):
         self.layers = []
@@ -157,7 +106,7 @@ class Network(object):
         signal.signal(signal.SIGINT, self.__sigint_handler)
 
     def add_layer(self, layer):
-        logger.info('Adding layer-{}: weights.shape={}'.format(len(self.layers) + 1, layer.weights.shape))
+        logger.info('Adding layer-{}: weights.shape={}, act_func={}'.format(len(self.layers) + 1, layer.weights.shape, layer.act_func.name))
         self.layers.append(layer)
 
     def __validate(self, nn_input_dim):
