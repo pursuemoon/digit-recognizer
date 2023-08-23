@@ -12,6 +12,7 @@ class ActFunc(enum.IntEnum):
     Sigmoid = 2,
     Relu = 3,
     Tanh = 4,
+    Softmax = 5,
 
 def identity(x):
     return x
@@ -41,6 +42,11 @@ def tanh(x):
 def tanh_derivative(activated):
     return 1 - numpy.square(activated)
 
+def softmax(x):
+    # Original formula: softmax(x) = numpy.exp(x) / numpy.sum(numpy.exp(x), axis=0).
+    e_x = numpy.exp(x - numpy.max(x))
+    return e_x / numpy.sum(e_x, axis=0)
+
 def apply_activation(x, act_func):
     if act_func == ActFunc.Identity:
         return identity(x)
@@ -50,6 +56,8 @@ def apply_activation(x, act_func):
         return relu(x)
     if act_func == ActFunc.Tanh:
         return tanh(x)
+    if act_func == ActFunc.Softmax:
+        return softmax(x)
 
 def apply_activation_derivative(x, act_func):
     if act_func == ActFunc.Identity:
@@ -60,6 +68,15 @@ def apply_activation_derivative(x, act_func):
         return relu_derivative(x)
     if act_func == ActFunc.Tanh:
         return tanh_derivative(x)
+    if act_func == ActFunc.Softmax:
+        # Since the softmax function is not a univariate function, i.e. its output depends on all
+        # dimensions of the x vector, the derivative of the softmax function can not be represented
+        # by activated values themselves. Fortunately, the formula which calculates the partial
+        # derivative of the loss function can be simplified, so 1 is returned here.
+        #
+        # Note that the softmax function is only allowed as an activation function in the output
+        # layer to transform logits into probability distribution.
+        return 1
 
 
 # Plotting graphs of different activation functions.

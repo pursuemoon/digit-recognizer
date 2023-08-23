@@ -113,6 +113,8 @@ class Network(object):
         for i in range(layer_size):
             if i > 0:
                 assert self.layers[i].input_dim == self.layers[i - 1].output_dim, "input_dim of current layer must be equal to output_dim of last layer"
+            if i < layer_size - 1:
+                assert self.layers[i].act_func != ActFunc.Softmax, "softmax is only allowed as activation function on the last layer"
 
     def __sigint_handler(self, signum, frame):
         self.is_being_stoped = True
@@ -162,7 +164,7 @@ class Network(object):
                     origin_input = x_train[j] if k == 0 else None
 
                     # Update parameters.
-                    self.layers[k].update_parameters(learning_rate, last_layer, origin_input)
+                    self.layers[k].update_parameters(learning_rate * (1 - (i + 1) / max_epoch) + 5e-4, last_layer, origin_input)
 
                 if print_mod > 0 and j % print_mod == (print_mod - 1):
                     with numpy.printoptions(linewidth=numpy.inf):

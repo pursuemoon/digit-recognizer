@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     network = nn.Network(random_seed=1964)
     network.add_layer(nn.Layer(28 * 28, 32, nn.ActFunc.Sigmoid))
-    network.add_layer(nn.Layer(32, 10, nn.ActFunc.Sigmoid))
+    network.add_layer(nn.Layer(32, 10, nn.ActFunc.Softmax))
 
     # network = nn.Network()
     # network.load_from_file('2023-08-17_00-34-56.npz')
@@ -67,7 +67,7 @@ if __name__ == "__main__":
         'print_mse': False,
         'print_var': False,
     }
-    network.train(normalize(train_images), train_labels, 0.1, 5, **kwargs)
+    network.train(normalize(train_images), train_labels, 0.1, 15, **kwargs)
     # network.save_as_file()
 
     logger.info("Loading test data...")
