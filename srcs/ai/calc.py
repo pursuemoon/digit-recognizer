@@ -8,11 +8,12 @@ import matplotlib.widgets as widgets
 # Activation Functions.
 
 class ActFunc(enum.IntEnum):
-    Identity = 1,
-    Sigmoid = 2,
-    Relu = 3,
-    Tanh = 4,
-    Softmax = 5,
+    Identity  = 100,
+    Sigmoid   = 200,
+    Relu      = 300,
+    LeakyRelu = 301,
+    Tanh      = 400,
+    Softmax   = 500,
 
 def identity(x):
     return x
@@ -35,6 +36,15 @@ def relu_derivative(activated):
     tmp[activated <= 0] = 0
     return tmp
 
+def leaky_relu(x):
+    return numpy.maximum(0.01 * x, x)
+
+def leaky_relu_derivative(activated):
+    tmp = numpy.copy(activated)
+    tmp[activated > 0] = 1
+    tmp[activated <= 0] = 0.01
+    return tmp
+
 def tanh(x):
     # Original formula: tanh(x) = (numpy.exp(x) - numpy.exp(-x)) / (numpy.exp(x) + numpy.exp(-x)).
     return numpy.tanh(x)
@@ -54,6 +64,8 @@ def apply_activation(x, act_func):
         return sigmoid(x)
     if act_func == ActFunc.Relu:
         return relu(x)
+    if act_func == ActFunc.LeakyRelu:
+        return leaky_relu(x)
     if act_func == ActFunc.Tanh:
         return tanh(x)
     if act_func == ActFunc.Softmax:
@@ -66,6 +78,8 @@ def apply_activation_derivative(x, act_func):
         return sigmoid_derivative(x)
     if act_func == ActFunc.Relu:
         return relu_derivative(x)
+    if act_func == ActFunc.LeakyRelu:
+        return leaky_relu_derivative(x)
     if act_func == ActFunc.Tanh:
         return tanh_derivative(x)
     if act_func == ActFunc.Softmax:
@@ -82,36 +96,40 @@ def apply_activation_derivative(x, act_func):
 # Plotting graphs of different activation functions.
 
 if __name__ == "__main__":
-    x = numpy.arange(-3, 3, 0.05)
+    x = numpy.arange(-2, 2, 0.001)
 
     y_identity = identity(x)
     y_sigmoid = sigmoid(x)
     y_relu = relu(x)
+    y_leaky_relu = leaky_relu(x)
     y_tanh = tanh(x)
 
     fig, ax = plt.subplots()
 
     ax.plot(x, y_identity, label='identity', color='#ff77aa', linestyle='-')
-    ax.plot(x, identity_derivative(y_identity), label='identity\'', color='#ff77aa', linestyle='--', visible=False)
+    ax.plot(x, identity_derivative(y_identity), label='identity\'', color='#ff77aa', linestyle='--', visible=False, linewidth=1)
 
     ax.plot(x, y_sigmoid, label='sigmoid', color='#555533', linestyle='-')
-    ax.plot(x, sigmoid_derivative(y_sigmoid), label='sigmoid\'', color='#555533', linestyle='--', visible=False)
+    ax.plot(x, sigmoid_derivative(y_sigmoid), label='sigmoid\'', color='#555533', linestyle='--', visible=False, linewidth=1)
 
     ax.plot(x, y_relu, label='relu', color='#cc9955', linestyle='-')
-    ax.plot(x, relu_derivative(y_relu), label='relu\'', color='#cc9955', linestyle='--', visible=False)
+    ax.plot(x, relu_derivative(y_relu), label='relu\'', color='#cc9955', linestyle='--', visible=False, linewidth=1)
+
+    ax.plot(x, y_leaky_relu, label='leaky relu', color='#dd66aa', linestyle='-')
+    ax.plot(x, leaky_relu_derivative(y_leaky_relu), label='leaky relu\'', color='#dd66aa', linestyle='--', visible=False, linewidth=1)
 
     ax.plot(x, y_tanh, label='tanh', color='#33cc44', linestyle='-')
-    ax.plot(x, tanh_derivative(y_tanh), label='tanh\'', color='#33cc44', linestyle='--', visible=False)
+    ax.plot(x, tanh_derivative(y_tanh), label='tanh\'', color='#33cc44', linestyle='--', visible=False, linewidth=1)
 
     legend = ax.legend(loc='lower right')
 
     lines = ax.get_lines()
     labels = [line.get_label() for line in lines]
 
-    plt.ylim(-1 - 0.1, 1 + 0.1)
+    plt.ylim(-2 - 0.1, 2 + 0.1)
     plt.subplots_adjust(left=0.3)
 
-    rax = plt.axes([0.01, 0.2, 0.15, 0.03 * len(lines)])
+    rax = plt.axes([0.05, 0.2, 0.15, 0.03 * len(lines)])
 
     def show_function(label):
         line = lines[labels.index(label)]
