@@ -99,7 +99,7 @@ class Network(object):
         self.is_being_stoped = False
         if random_seed:
             numpy.random.seed(random_seed)
-            logger.info('Seed was set: random_seed=%d' % random_seed)
+            logger.info('Seed was set to Network: random_seed=%d' % random_seed)
         signal.signal(signal.SIGINT, self.__sigint_handler)
 
     def add_layer(self, layer):
@@ -133,9 +133,6 @@ class Network(object):
 
         layer_size = len(self.layers)
 
-        y_onehot = numpy.zeros((len(x_train), self.layers[layer_size - 1].output_dim), numpy.float64)
-        y_onehot[numpy.arange(len(y_train)), y_train] = 1
-
         print_mod = kwargs['print_mod'] if 'print_mod' in kwargs else 5000
         print_mse = kwargs['print_mse'] if 'print_mse' in kwargs else False
         print_var = kwargs['print_var'] if 'print_var' in kwargs else False
@@ -153,7 +150,7 @@ class Network(object):
                 for k in reversed(range(layer_size)):
                     # Info of next layer.
                     next_layer = None if k == layer_size - 1 else self.layers[k + 1]
-                    final_answer = y_onehot[j] if k == layer_size - 1 else None
+                    final_answer = y_train[j] if k == layer_size - 1 else None
 
                     # Apply backward propogation.
                     self.layers[k].propagate_backward(next_layer, final_answer)
@@ -175,7 +172,7 @@ class Network(object):
                         logger.debug("epoch={}, index={}, ct={}".format(i + 1, j + 1, human_readable_time(need_time)))
 
                         if print_mse:
-                            mse = numpy.mean(numpy.square(self.layers[layer_size - 1].output - y_onehot[j]))
+                            mse = numpy.mean(numpy.square(self.layers[layer_size - 1].output - y_train[j]))
                             logger.debug("-- mse={}".format(mse))
 
                         if print_var:
@@ -203,7 +200,8 @@ class Network(object):
                 else:
                     self.layers[k].calculate_forward(self.layers[k - 1].output)
             ans = numpy.argmax(self.layers[layer_size - 1].output)
-            if ans == y_test[j]:
+            std = numpy.argmax(y_test[j])
+            if ans == std:
                 cnt_correct += 1
 
         correct_rate = cnt_correct / len(y_test)
