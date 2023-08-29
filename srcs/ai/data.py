@@ -72,8 +72,6 @@ class MnistDataSet(object):
         images, labels = self.load_train_data()
         assert len(images) == len(labels), "len(images) must be equal to len(labels) when using data_generator"
 
-        logger.info("Loading train data: batch_size=%d" % batch_size)
-
         if random_seed:
             numpy.random.seed(random_seed)
             logger.info('Seed was set to data_generator: random_seed=%d' % random_seed)

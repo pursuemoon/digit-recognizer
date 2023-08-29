@@ -11,8 +11,7 @@ if __name__ == "__main__":
 
     network = Network(data_set=MnistDataSet(), random_seed=1964)
     network.add_layer(Layer(28 * 28, 64, ActFunc.Relu))
-    network.add_layer(Layer(64, 32, ActFunc.Relu))
-    network.add_layer(Layer(32, 10, ActFunc.Softmax))
+    network.add_layer(Layer(64, 10, ActFunc.Softmax))
 
     # network = Network(data_set=MnistDataSet())
     # network.load_from_file()

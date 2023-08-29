@@ -140,6 +140,9 @@ class Network(object):
         print_cross_entropy = kwargs['print_cross_entropy'] if 'print_cross_entropy' in kwargs else False
         print_variance = kwargs['print_variance'] if 'print_variance' in kwargs else False
 
+        total_cnt = max_epoch * self.data_set.TRAIN_SIZE
+        process_bar = tqdm.tqdm(total=total_cnt, colour='cyan', ncols=120, unit_scale=True, desc="Training")
+
         for i in range(max_epoch):
             if self.is_being_stoped:
                 break
@@ -172,12 +175,12 @@ class Network(object):
                     # Update parameters.
                     self.layers[k].update_parameters(learning_rate * (1 - (i + 1) / max_epoch) + 5e-4, batch_size, last_layer, origin_input)
 
+                current_cnt = i * self.data_set.TRAIN_SIZE + j * batch_size + len(data)
+                process_bar.update(len(data[0]))
+
                 if j % 100 == 0 or len(data[0]) != batch_size:
                     with numpy.printoptions(linewidth=numpy.inf):
                         used_time = time.time() - start_time
-
-                        total_cnt = max_epoch * self.data_set.TRAIN_SIZE
-                        current_cnt = i * self.data_set.TRAIN_SIZE + j * batch_size + len(data)
 
                         index = j * batch_size + len(data[0])
                         need_time = human_readable_time(used_time / current_cnt * total_cnt - used_time)
@@ -198,6 +201,7 @@ class Network(object):
                 if self.is_being_stoped:
                     break
 
+        process_bar.close()
         self.is_trained = True
         
         end_time = time.time()
