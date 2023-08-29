@@ -1,8 +1,8 @@
 # -- coding: utf-8 --
 
 import os
-import enum
 import numpy
+import tqdm
 import time
 import signal
 
@@ -32,8 +32,6 @@ class Layer(object):
 
         d_0 = apply_activation_derivative(apply_activation(0, self.act_func), self.act_func)
         xavier_gain = numpy.sqrt(2) if d_0 == 0 else 1 / d_0
-
-        # xavier_gain = 1 if d_0 == 0 else 1 / apply_activation_derivative(d_0, self.act_func)
 
         if weights is not None:
             assert input_dim == weights.shape[0], "weights.shape[0] must be equal to input_dim"
@@ -67,21 +65,26 @@ class Layer(object):
         tmp = numpy.dot(x, self.weights) + self.bias
         self.output = apply_activation(tmp, self.act_func)
 
-    def propagate_backward(self, next_layer, y_onehot):
+    def propagate_backward(self, next_layer, y_output):
         # Calculate errors from the next layer.
         if not next_layer:
-            self.error = self.output - y_onehot
+            self.error = self.output - y_output
         else:
-            self.error = numpy.dot(next_layer.weights, next_layer.delta)
+            self.error = numpy.dot(next_layer.delta, next_layer.weights.T)
 
         # Calculate deltas of this layer.
         self.delta = self.error * apply_activation_derivative(self.output, self.act_func)
     
-    def update_parameters(self, learning_rate, last_layer, x_input):
+    def update_parameters(self, learning_rate, batch_size, last_layer, x_input):
         # Update parameters by back-propogation.
         layer_input = last_layer.output if last_layer else x_input
-        self.weights -= learning_rate * numpy.atleast_2d(layer_input).T * self.delta
-        self.bias -= learning_rate * self.delta
+
+        gradient_sum = numpy.zeros_like(self.weights)
+        for idx in range(len(layer_input)):
+            gradient_sum += numpy.atleast_2d(layer_input[idx]).T * self.delta[idx]
+        self.weights -= learning_rate * gradient_sum / batch_size
+
+        self.bias -= learning_rate * numpy.mean(self.delta, axis=0)
 
     def get_output_std(self):
         return numpy.std(self.output)
@@ -93,7 +96,8 @@ class Layer(object):
 # Neural Network.
 
 class Network(object):
-    def __init__(self, random_seed=None):
+    def __init__(self, data_set, random_seed=None):
+        self.data_set = data_set
         self.layers = []
         self.is_trained = False
         self.is_being_stoped = False
@@ -120,37 +124,42 @@ class Network(object):
         self.is_being_stoped = True
         logger.info('Training is being early stoped.')
 
-    def train(self, x_train, y_train, learning_rate, max_epoch, **kwargs):
-        self.__validate(x_train.shape[1])
-        assert len(x_train) == len(y_train), "length of y_train must be equal to length of x_train"
+    def train(self, max_epoch, learning_rate, batch_size, **kwargs):
+        self.__validate(self.data_set.DIMENSIONS)
         assert learning_rate > 0, "learning rate must be greater than 0"
         assert max_epoch > 0, "max_epoch must be greater than 0"
 
         self.is_trained = False
-        logger.info('Training started.')
+        logger.info('Training started: max_epoch=%d, learning_rate=%f, batch_size=%d' % (max_epoch, learning_rate, batch_size))
 
         start_time = time.time()
 
         layer_size = len(self.layers)
 
-        print_mod = kwargs['print_mod'] if 'print_mod' in kwargs else 5000
-        print_mse = kwargs['print_mse'] if 'print_mse' in kwargs else False
-        print_var = kwargs['print_var'] if 'print_var' in kwargs else False
+        print_mean_square_error = kwargs['print_mean_square_error'] if 'print_mean_square_error' in kwargs else False
+        print_cross_entropy = kwargs['print_cross_entropy'] if 'print_cross_entropy' in kwargs else False
+        print_variance = kwargs['print_variance'] if 'print_variance' in kwargs else False
 
         for i in range(max_epoch):
             if self.is_being_stoped:
                 break
-            for j in range(len(x_train)):
+
+            # Generate examples by batch randomly in each epoch.
+            data_generator = self.data_set.data_generator(batch_size)
+
+            for j, data in enumerate(data_generator):
+                x_train = data[0]
+                y_train = data[1]
                 for k in range(layer_size):
                     if k == 0:
-                        self.layers[k].calculate_forward(x_train[j])
+                        self.layers[k].calculate_forward(x_train)
                     else:
                         self.layers[k].calculate_forward(self.layers[k - 1].output)
 
                 for k in reversed(range(layer_size)):
                     # Info of next layer.
                     next_layer = None if k == layer_size - 1 else self.layers[k + 1]
-                    final_answer = y_train[j] if k == layer_size - 1 else None
+                    final_answer = y_train if k == layer_size - 1 else None
 
                     # Apply backward propogation.
                     self.layers[k].propagate_backward(next_layer, final_answer)
@@ -158,26 +167,33 @@ class Network(object):
                 for k in reversed(range(layer_size)):
                     # Info of last layer.
                     last_layer = None if k == 0 else self.layers[k - 1]
-                    origin_input = x_train[j] if k == 0 else None
+                    origin_input = x_train if k == 0 else None
 
                     # Update parameters.
-                    self.layers[k].update_parameters(learning_rate * (1 - (i + 1) / max_epoch) + 5e-4, last_layer, origin_input)
+                    self.layers[k].update_parameters(learning_rate * (1 - (i + 1) / max_epoch) + 5e-4, batch_size, last_layer, origin_input)
 
-                if print_mod > 0 and j % print_mod == (print_mod - 1):
+                if j % 100 == 0 or len(data[0]) != batch_size:
                     with numpy.printoptions(linewidth=numpy.inf):
-                        total_cnt = max_epoch * len(x_train)
-                        current_cnt = i * len(x_train) + (j + 1)
                         used_time = time.time() - start_time
-                        need_time = used_time / current_cnt * total_cnt - used_time
-                        logger.debug("epoch={}, index={}, ct={}".format(i + 1, j + 1, human_readable_time(need_time)))
 
-                        if print_mse:
-                            mse = numpy.mean(numpy.square(self.layers[layer_size - 1].output - y_train[j]))
-                            logger.debug("-- mse={}".format(mse))
+                        total_cnt = max_epoch * self.data_set.TRAIN_SIZE
+                        current_cnt = i * self.data_set.TRAIN_SIZE + j * batch_size + len(data)
 
-                        if print_var:
+                        index = j * batch_size + len(data[0])
+                        need_time = human_readable_time(used_time / current_cnt * total_cnt - used_time)
+                        logger.debug("epoch={}, index={}, need_time={}".format(i + 1, index, need_time))
+
+                        if print_mean_square_error:
+                            mse = numpy.mean(numpy.square(self.layers[layer_size - 1].output - y_train))
+                            logger.debug("-- mean_square_error={}".format(mse))
+
+                        if print_cross_entropy:
+                            cre = -numpy.mean(numpy.sum(y_train * numpy.log(self.layers[layer_size - 1].output), axis=1))
+                            logger.debug("-- cross_entropy={}".format(cre))
+
+                        if print_variance:
                             output_var = [layer.get_output_var() for layer in self.layers]
-                            logger.debug("-- output_var={}".format(output_var))
+                            logger.debug("-- output_variance={}".format(output_var))
 
                 if self.is_being_stoped:
                     break
@@ -187,11 +203,16 @@ class Network(object):
         end_time = time.time()
         logger.info('Training ended. Time used: {}'.format(human_readable_time(end_time - start_time)))
 
-    def test(self, x_test, y_test):
+    def test(self):
         assert self.is_trained, "neural network must be trained first before using it"
 
         cnt_correct = 0
         layer_size = len(self.layers)
+
+        data = self.data_set.load_test_data()
+
+        x_test = self.data_set.normalize(data[0])
+        y_test = self.data_set.onehot_encode(data[1])
 
         for j in range(len(x_test)):
             for k in range(layer_size):

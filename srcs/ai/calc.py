@@ -53,11 +53,11 @@ def tanh_derivative(activated):
     return 1 - numpy.square(activated)
 
 def softmax(x):
-    # Original formula: softmax(x) = numpy.exp(x) / numpy.sum(numpy.exp(x), axis=column_axis).
+    # Original formula: softmax(x) = numpy.exp(x) / numpy.sum(numpy.exp(x), axis=column_axis, keepdims=True).
     if isinstance(x, numpy.ndarray):
         column_axis = 0 if len(x.shape) == 1 else 1
-        e_x = numpy.exp(x - numpy.max(x, axis=column_axis))
-        return e_x / numpy.sum(e_x, axis=column_axis)
+        e_x = numpy.exp(x - numpy.max(x, axis=column_axis, keepdims=True))
+        return e_x / numpy.sum(e_x, axis=column_axis, keepdims=True)
     else:
         # For x is just a number.
         return 1
