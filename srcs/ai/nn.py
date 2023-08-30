@@ -75,9 +75,10 @@ class Layer(object):
         # Calculate deltas of this layer.
         self.delta = self.error * apply_activation_derivative(self.output, self.act_func)
     
-    def update_parameters(self, learning_rate, batch_size, last_layer, x_input):
+    def update_parameters(self, learning_rate, last_layer, x_input):
         # Update parameters by back-propogation.
         layer_input = last_layer.output if last_layer else x_input
+        batch_size = len(layer_input)
 
         gradient_sum = numpy.zeros_like(self.weights)
         for idx in range(len(layer_input)):
@@ -173,7 +174,7 @@ class Network(object):
                     origin_input = x_train if k == 0 else None
 
                     # Update parameters.
-                    self.layers[k].update_parameters(learning_rate * (1 - (i + 1) / max_epoch) + 5e-4, batch_size, last_layer, origin_input)
+                    self.layers[k].update_parameters(learning_rate * (1 - (i + 1) / max_epoch) + 5e-4, last_layer, origin_input)
 
                 current_cnt = i * self.data_set.TRAIN_SIZE + j * batch_size + len(data)
                 process_bar.update(len(data[0]))
