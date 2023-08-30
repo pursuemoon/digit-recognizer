@@ -2,7 +2,7 @@
 
 from utils.log import logger
 
-from ai.nn import Network, Layer, ActFunc
+from ai.nn import Network, Layer, ActFunc, OptType
 from ai.data import MnistDataSet
 
 if __name__ == "__main__":
@@ -21,7 +21,9 @@ if __name__ == "__main__":
         'print_cross_entropy': False,
         'print_variance': False,
     }
-    network.train(max_epoch=5, learning_rate=0.1, batch_size=10, **kwargs)
+    network.train(max_epoch=5, learning_rate=0.001, opt_type=OptType.Adam,
+                  batch_size=10, momentum_coef=0.9, rms_coef=0.999, epsilon=1e-8,
+                  **kwargs)
     # network.save_as_file()
 
     logger.info("Testing...")
