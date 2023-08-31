@@ -34,17 +34,17 @@ class Optimizer(object):
         if opt_type == OptType.Momentum:
             assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
             self.momentum_coef = momentum_coef
-            params_log = 'momentum_coef={}'.format(self.momentum_coef)
+            params_log = ', momentum_coef={}'.format(self.momentum_coef)
         elif opt_type == OptType.AdaGrad:
             assert epsilon > 0, "epsilon must be greater than 0"
             self.epsilon = epsilon
-            params_log = 'epsilon={}'.format(self.epsilon)
+            params_log = ', epsilon={}'.format(self.epsilon)
         elif opt_type == OptType.RmsProp:
             assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
             assert epsilon > 0, "epsilon must be greater than 0"
             self.rms_coef = rms_coef
             self.epsilon = epsilon
-            params_log = 'rms_coef={}, epsilon={}'.format(self.rms_coef, self.epsilon)
+            params_log = ', rms_coef={}, epsilon={}'.format(self.rms_coef, self.epsilon)
         elif opt_type == OptType.Adam:
             assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
             assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
@@ -52,9 +52,11 @@ class Optimizer(object):
             self.momentum_coef = momentum_coef
             self.rms_coef = rms_coef
             self.epsilon = epsilon
-            params_log = 'momentum_coef={}, rms_coef={}, epsilon={}'.format(self.momentum_coef, self.rms_coef, self.epsilon)
+            params_log = ', momentum_coef={}, rms_coef={}, epsilon={}'.format(self.momentum_coef, self.rms_coef, self.epsilon)
+        else:
+            params_log = ''
 
-        logger.info('opt_type={}, {}'.format(self.opt_type.name, params_log))
+        logger.info('opt_type={}{}'.format(self.opt_type.name, params_log))
 
 # Layer of Neural Network.
 
@@ -161,6 +163,8 @@ class Layer(object):
         self.weights -= opt_learning_rate * opt_gradient
         self.bias -= learning_rate * numpy.mean(self.delta, axis=0)
 
+        # logger.info("opt_learning_rate={}, opt_gradient={}".format(numpy.mean(opt_learning_rate), numpy.mean(opt_gradient)))
+
     def get_output_std(self):
         return numpy.std(self.output)
 
@@ -266,19 +270,22 @@ class Network(object):
 
                         index = j * batch_size + len(data[0])
                         need_time = human_readable_time(used_time / current_cnt * total_cnt - used_time)
-                        logger.debug("epoch={}, index={}, need_time={}".format(i + 1, index, need_time))
+
+                        extra_log = ''
 
                         if print_mean_square_error:
                             mse = numpy.mean(numpy.square(self.layers[layer_size - 1].output - y_train))
-                            logger.debug("-- mean_square_error={}".format(mse))
+                            extra_log += ", mean_square_error={}".format(mse)
 
                         if print_cross_entropy:
                             cre = -numpy.mean(numpy.sum(y_train * numpy.log(self.layers[layer_size - 1].output), axis=1))
-                            logger.debug("-- cross_entropy={}".format(cre))
+                            extra_log += ", cross_entropy={}".format(cre)
 
                         if print_variance:
                             output_var = [layer.get_output_var() for layer in self.layers]
-                            logger.debug("-- output_variance={}".format(output_var))
+                            extra_log += ", output_variance={}".format(output_var)
+
+                        logger.debug("epoch={}, index={}, need_time={}{}".format(i + 1, index, need_time, extra_log))
 
                 if self.is_being_stoped:
                     break
