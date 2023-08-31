@@ -13,7 +13,8 @@ if __name__ == "__main__":
     logger.info("Building neural network...")
 
     network = Network(data_set=MnistDataSet(), random_seed=RANDOM_SEED)
-    network.add_layer(Layer(28 * 28, 32, ActFunc.Relu))
+    network.add_layer(Layer(28 * 28, 64, ActFunc.Relu))
+    network.add_layer(Layer(64, 32, ActFunc.Relu))
     network.add_layer(Layer(32, 10, ActFunc.Softmax))
 
     # network = Network(data_set=MnistDataSet(), random_seed=RANDOM_SEED)
@@ -24,8 +25,8 @@ if __name__ == "__main__":
         'print_cross_entropy': False,
         'print_variance': False,
     }
-    network.train(max_epoch=20, learning_rate=0.0001, opt_type=OptType.Adam,
-                  batch_size=10, momentum_coef=0.8, rms_coef=0.999, epsilon=1e-3,
+    network.train(max_epoch=20, learning_rate=0.1, opt_type=OptType.Momentum,
+                  batch_size=10, momentum_coef=0.99, rms_coef=0.999, epsilon=1e-8,
                   **kwargs)
     network.save_as_file(auto_name=True)
 

@@ -182,7 +182,7 @@ class Layer(object):
         # Calculate deltas of this layer.
         self.delta = self.error * apply_activation_derivative(self.output, self.act_func)
     
-    def update_parameters(self, learning_rate, optimizer, last_layer, x_input):
+    def update_parameters(self, learning_rate, optimizer, step, last_layer, x_input):
         # Update parameters by back-propogation.
         layer_input = last_layer.output if last_layer else x_input
 
@@ -197,17 +197,17 @@ class Layer(object):
             opt_gradient = self.momentum
         elif optimizer.opt_type == OptType.AdaGrad:
             self.descent_square_sum += numpy.square(gradient)
-            opt_learning_rate = learning_rate / (numpy.sqrt(self.descent_square_sum) + optimizer.epsilon)
+            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
             opt_gradient = gradient
         elif optimizer.opt_type == OptType.RmsProp:
             self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
-            opt_learning_rate = learning_rate / (numpy.sqrt(self.descent_square_sum) + optimizer.epsilon)
+            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
             opt_gradient = gradient
         elif optimizer.opt_type == OptType.Adam:
             self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
             self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
-            opt_learning_rate = learning_rate / (numpy.sqrt(self.descent_square_sum) + optimizer.epsilon)
-            opt_gradient = self.momentum
+            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum / (1 - pow(optimizer.rms_coef, step)) + optimizer.epsilon)
+            opt_gradient = self.momentum / (1 - pow(optimizer.momentum_coef, step))
         else:
             opt_learning_rate = learning_rate
             opt_gradient = gradient
@@ -280,6 +280,7 @@ class Network(object):
         total_cnt = max_epoch * self.data_set.TRAIN_SIZE
         process_bar = tqdm.tqdm(total=total_cnt, colour='cyan', ncols=120, unit_scale=True, desc="Training")
 
+        step = 0
         for i in range(max_epoch):
             if self.is_being_stoped:
                 break
@@ -288,6 +289,7 @@ class Network(object):
             data_generator = self.data_set.data_generator(batch_size)
 
             for j, data in enumerate(data_generator):
+                step += 1
                 x_train = data[0]
                 y_train = data[1]
                 for k in range(layer_size):
@@ -310,7 +312,7 @@ class Network(object):
                     origin_input = x_train if k == 0 else None
 
                     # Update parameters.
-                    self.layers[k].update_parameters(learning_rate, current_optimizer, last_layer, origin_input)
+                    self.layers[k].update_parameters(learning_rate, current_optimizer, step, last_layer, origin_input)
 
                 current_cnt = i * self.data_set.TRAIN_SIZE + j * batch_size + len(data)
                 process_bar.update(len(data[0]))
