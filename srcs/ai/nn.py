@@ -25,7 +25,8 @@ class OptType(enum.IntEnum):
     Adam      = 500,
 
 class Optimizer(object):
-    def __init__(self, opt_type=None, max_epoch=None, learning_rate=None, batch_size=None, momentum_coef=None, rms_coef=None, epsilon=None, nd_array=None):
+    def __init__(self, opt_type=None, max_epoch=None, learning_rate=None, batch_size=None,
+                 momentum_coef=None, rms_coef=None, epsilon=None, nd_array=None):
         if nd_array is None:
             assert isinstance(opt_type, OptType), "opt_type must be of enum type of OptType"
 
@@ -36,35 +37,36 @@ class Optimizer(object):
         self.opt_type = opt_type if nd_array is None else OptType(int(nd_array[0]))
         self.max_epoch = max_epoch if nd_array is None else int(nd_array[1])
         self.learning_rate = learning_rate if nd_array is None else nd_array[2]
+        self.batch_size = batch_size if nd_array is None else nd_array[3]
 
         if self.opt_type == OptType.Momentum:
             if nd_array is None:
                 assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
-            self.momentum_coef = momentum_coef if nd_array is None else nd_array[3]
+            self.momentum_coef = momentum_coef if nd_array is None else nd_array[4]
         elif self.opt_type == OptType.AdaGrad:
             if nd_array is None:
                 assert epsilon > 0, "epsilon must be greater than 0"
-            self.epsilon = epsilon if nd_array is None else nd_array[3]
+            self.epsilon = epsilon if nd_array is None else nd_array[4]
         elif self.opt_type == OptType.RmsProp:
             if nd_array is None:
                 assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
                 assert epsilon > 0, "epsilon must be greater than 0"
-            self.rms_coef = rms_coef if nd_array is None else nd_array[3]
-            self.epsilon = epsilon if nd_array is None else nd_array[4]
+            self.rms_coef = rms_coef if nd_array is None else nd_array[4]
+            self.epsilon = epsilon if nd_array is None else nd_array[5]
         elif self.opt_type == OptType.Adam:
             if nd_array is None:
                 assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
                 assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
                 assert epsilon > 0, "epsilon must be greater than 0"
-            self.momentum_coef = momentum_coef if nd_array is None else nd_array[3]
-            self.rms_coef = rms_coef if nd_array is None else nd_array[4]
-            self.epsilon = epsilon if nd_array is None else nd_array[5]
+            self.momentum_coef = momentum_coef if nd_array is None else nd_array[4]
+            self.rms_coef = rms_coef if nd_array is None else nd_array[5]
+            self.epsilon = epsilon if nd_array is None else nd_array[6]
 
     def mark_not_finish(self):
         self.max_epoch = -1
 
     def __str__(self):
-        params_log = '[{}] max_epoch={}, learning_rate={}'.format(self.opt_type.name, self.max_epoch, self.learning_rate)
+        params_log = '[{}] max_epoch={}, learning_rate={}, batch_size={}'.format(self.opt_type.name, self.max_epoch, self.learning_rate, self.batch_size)
 
         if self.opt_type == OptType.Momentum:
             params_log += ', momentum_coef={}'.format(self.momentum_coef)
@@ -78,7 +80,7 @@ class Optimizer(object):
         return params_log
 
     def as_nd_array(self):
-        params = [self.opt_type, self.max_epoch, self.learning_rate]
+        params = [self.opt_type, self.max_epoch, self.learning_rate, self.batch_size]
         if self.opt_type == OptType.Momentum:
             params.append(self.momentum_coef)
         elif self.opt_type == OptType.AdaGrad:
@@ -91,6 +93,22 @@ class Optimizer(object):
             params.append(self.rms_coef)
             params.append(self.epsilon)
         return numpy.array(params, numpy.float64)
+
+    def as_short_name(self):
+        common_params = "{}E-{}s-{}-{}".format(self.max_epoch, self.batch_size, self.opt_type.name, self.learning_rate)
+
+        special_params = ""
+        if self.opt_type == OptType.Momentum:
+            special_params = "{}m".format(self.momentum_coef)
+        elif self.opt_type == OptType.AdaGrad:
+            special_params = "{}e".format(self.epsilon)
+        elif self.opt_type == OptType.RmsProp:
+            special_params = "{}r-{}e".format(self.rms_coef, self.epsilon)
+        elif self.opt_type == OptType.Adam:
+            special_params = "{}m-{}r-{}e".format(self.momentum_coef, self.rms_coef, self.epsilon)
+
+        name = "[{}]-[{}]".format(common_params, special_params)
+        return name
 
 # Layer of Neural Network.
 
@@ -360,9 +378,16 @@ class Network(object):
         correct_rate = cnt_correct / len(y_test)
         return correct_rate
 
-    def save_as_file(self, file_name=None):
+    def save_as_file(self, file_name=None, auto_name=False):
         if not file_name:
-            file_name = time.strftime('%Y-%m-%d_%H-%M-%S', time.localtime()) + ".npz"
+            if auto_name:
+                pretrain_mark = 'Pre-' if len(self.optimizers) > 1 else ''
+                structure = '-'.join(['{}-{}'.format(layer.output_dim, layer.act_func.name) for layer in self.layers])
+                optimizer = self.optimizers[-1]
+                file_name = '{}[{}]-{}.npz'.format(pretrain_mark, structure, optimizer.as_short_name())
+            else:
+                file_name = time.strftime('%Y-%m-%d_%H-%M-%S', time.localtime()) + ".npz"
+
         file_path = os.path.join(prepare_directory(Env.MODEL_DIR), file_name)
 
         model = {}

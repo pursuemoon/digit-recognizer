@@ -17,17 +17,17 @@ if __name__ == "__main__":
     network.add_layer(Layer(32, 10, ActFunc.Softmax))
 
     # network = Network(data_set=MnistDataSet(), random_seed=RANDOM_SEED)
-    # network.load_from_file('20-0.0005-20-[Adam-0.9-0.999-0.001]-32-Relu.npz')
+    # network.load_from_file()
 
     kwargs = {
         'print_mean_square_error': False,
         'print_cross_entropy': False,
         'print_variance': False,
     }
-    network.train(max_epoch=20, learning_rate=0.0005, opt_type=OptType.Adam,
-                  batch_size=10, momentum_coef=0.9, rms_coef=0.99, epsilon=1e-3,
+    network.train(max_epoch=20, learning_rate=0.0001, opt_type=OptType.Adam,
+                  batch_size=10, momentum_coef=0.8, rms_coef=0.999, epsilon=1e-3,
                   **kwargs)
-    # network.save_as_file('20-0.0005-20-[Adam-0.9-0.99-0.0001]-32-Relu.npz')
+    network.save_as_file(auto_name=True)
 
     logger.info("Testing...")
     correct_rate = network.test()
