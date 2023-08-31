@@ -25,38 +25,72 @@ class OptType(enum.IntEnum):
     Adam      = 500,
 
 class Optimizer(object):
-    def __init__(self, opt_type, batch_size, momentum_coef=None, rms_coef=None, epsilon=None):
-        assert isinstance(opt_type, OptType), "opt_type must be of enum type of OptType"
+    def __init__(self, opt_type=None, max_epoch=None, learning_rate=None, batch_size=None, momentum_coef=None, rms_coef=None, epsilon=None, nd_array=None):
+        if nd_array is None:
+            assert isinstance(opt_type, OptType), "opt_type must be of enum type of OptType"
 
-        assert batch_size > 0, "batch_size must be set and greater than 0"
-        self.opt_type = opt_type
+            assert max_epoch > 0, "max_epoch must be greater than 0"
+            assert learning_rate > 0, "learning rate must be greater than 0"
+            assert batch_size > 0, "batch_size must be set and greater than 0"
 
-        if opt_type == OptType.Momentum:
-            assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
-            self.momentum_coef = momentum_coef
-            params_log = ', momentum_coef={}'.format(self.momentum_coef)
-        elif opt_type == OptType.AdaGrad:
-            assert epsilon > 0, "epsilon must be greater than 0"
-            self.epsilon = epsilon
-            params_log = ', epsilon={}'.format(self.epsilon)
-        elif opt_type == OptType.RmsProp:
-            assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
-            assert epsilon > 0, "epsilon must be greater than 0"
-            self.rms_coef = rms_coef
-            self.epsilon = epsilon
-            params_log = ', rms_coef={}, epsilon={}'.format(self.rms_coef, self.epsilon)
-        elif opt_type == OptType.Adam:
-            assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
-            assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
-            assert epsilon > 0, "epsilon must be greater than 0"
-            self.momentum_coef = momentum_coef
-            self.rms_coef = rms_coef
-            self.epsilon = epsilon
-            params_log = ', momentum_coef={}, rms_coef={}, epsilon={}'.format(self.momentum_coef, self.rms_coef, self.epsilon)
-        else:
-            params_log = ''
+        self.opt_type = opt_type if nd_array is None else OptType(int(nd_array[0]))
+        self.max_epoch = max_epoch if nd_array is None else int(nd_array[1])
+        self.learning_rate = learning_rate if nd_array is None else nd_array[2]
 
-        logger.info('opt_type={}{}'.format(self.opt_type.name, params_log))
+        if self.opt_type == OptType.Momentum:
+            if nd_array is None:
+                assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
+            self.momentum_coef = momentum_coef if nd_array is None else nd_array[3]
+        elif self.opt_type == OptType.AdaGrad:
+            if nd_array is None:
+                assert epsilon > 0, "epsilon must be greater than 0"
+            self.epsilon = epsilon if nd_array is None else nd_array[3]
+        elif self.opt_type == OptType.RmsProp:
+            if nd_array is None:
+                assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
+                assert epsilon > 0, "epsilon must be greater than 0"
+            self.rms_coef = rms_coef if nd_array is None else nd_array[3]
+            self.epsilon = epsilon if nd_array is None else nd_array[4]
+        elif self.opt_type == OptType.Adam:
+            if nd_array is None:
+                assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
+                assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
+                assert epsilon > 0, "epsilon must be greater than 0"
+            self.momentum_coef = momentum_coef if nd_array is None else nd_array[3]
+            self.rms_coef = rms_coef if nd_array is None else nd_array[4]
+            self.epsilon = epsilon if nd_array is None else nd_array[5]
+
+    def mark_not_finish(self):
+        self.max_epoch = -1
+
+    def __str__(self):
+        params_log = '[{}] max_epoch={}, learning_rate={}'.format(self.opt_type.name, self.max_epoch, self.learning_rate)
+
+        if self.opt_type == OptType.Momentum:
+            params_log += ', momentum_coef={}'.format(self.momentum_coef)
+        elif self.opt_type == OptType.AdaGrad:
+            params_log += ', epsilon={}'.format(self.epsilon)
+        elif self.opt_type == OptType.RmsProp:
+            params_log += ', rms_coef={}, epsilon={}'.format(self.rms_coef, self.epsilon)
+        elif self.opt_type == OptType.Adam:
+            params_log += ', momentum_coef={}, rms_coef={}, epsilon={}'.format(self.momentum_coef, self.rms_coef, self.epsilon)
+
+        return params_log
+
+    def as_nd_array(self):
+        params = [self.opt_type, self.max_epoch, self.learning_rate]
+        if self.opt_type == OptType.Momentum:
+            params.append(self.momentum_coef)
+        elif self.opt_type == OptType.AdaGrad:
+            params.append(self.epsilon)
+        elif self.opt_type == OptType.RmsProp:
+            params.append(self.rms_coef)
+            params.append(self.epsilon)
+        elif self.opt_type == OptType.Adam:
+            params.append(self.momentum_coef)
+            params.append(self.rms_coef)
+            params.append(self.epsilon)
+        return numpy.array(params, numpy.float64)
 
 # Layer of Neural Network.
 
@@ -163,8 +197,6 @@ class Layer(object):
         self.weights -= opt_learning_rate * opt_gradient
         self.bias -= learning_rate * numpy.mean(self.delta, axis=0)
 
-        # logger.info("opt_learning_rate={}, opt_gradient={}".format(numpy.mean(opt_learning_rate), numpy.mean(opt_gradient)))
-
     def get_output_std(self):
         return numpy.std(self.output)
 
@@ -178,6 +210,7 @@ class Network(object):
     def __init__(self, data_set, random_seed=None):
         self.data_set = data_set
         self.layers = []
+        self.optimizers = []
         self.is_trained = False
         self.is_being_stoped = False
         if random_seed:
@@ -201,26 +234,26 @@ class Network(object):
 
     def __sigint_handler(self, signum, frame):
         self.is_being_stoped = True
+        self.optimizers[-1].mark_not_finish()
         logger.info('Training is being early stoped.')
 
     def train(self, max_epoch, learning_rate, opt_type=OptType.MiniBatch,
-              batch_size=20, momentum_coef=0.9, rms_coef=0.999, epsilon=1e-8,
+              batch_size=20, momentum_coef=0.9, rms_coef=0.999, epsilon=1e-7,
               **kwargs):
         self.__validate(self.data_set.DIMENSIONS)
-        assert learning_rate > 0, "learning rate must be greater than 0"
-        assert max_epoch > 0, "max_epoch must be greater than 0"
+
+        # Initialize the current optimizer and its associated values.
+        current_optimizer = Optimizer(opt_type, max_epoch, learning_rate, batch_size, momentum_coef, rms_coef, epsilon)
+        self.optimizers.append(current_optimizer)
+        for layer in self.layers:
+            layer.init_optimization_value(current_optimizer)
 
         self.is_trained = False
 
-        logger.info('Training started: max_epoch=%d, learning_rate=%f, batch_size=%d' % (max_epoch, learning_rate, batch_size))
+        logger.info('Training started: {}'.format(current_optimizer))
         start_time = time.time()
 
         layer_size = len(self.layers)
-
-        # Initialize optimizer and its associated values.
-        optimizer = Optimizer(opt_type, batch_size, momentum_coef, rms_coef, epsilon)
-        for i in range(layer_size):
-            self.layers[i].init_optimization_value(optimizer)
 
         print_mean_square_error = kwargs['print_mean_square_error'] if 'print_mean_square_error' in kwargs else False
         print_cross_entropy = kwargs['print_cross_entropy'] if 'print_cross_entropy' in kwargs else False
@@ -259,7 +292,7 @@ class Network(object):
                     origin_input = x_train if k == 0 else None
 
                     # Update parameters.
-                    self.layers[k].update_parameters(learning_rate, optimizer, last_layer, origin_input)
+                    self.layers[k].update_parameters(learning_rate, current_optimizer, last_layer, origin_input)
 
                 current_cnt = i * self.data_set.TRAIN_SIZE + j * batch_size + len(data)
                 process_bar.update(len(data[0]))
@@ -284,6 +317,12 @@ class Network(object):
                         if print_variance:
                             output_var = [layer.get_output_var() for layer in self.layers]
                             extra_log += ", output_variance={}".format(output_var)
+
+                        # if current_optimizer.mean_learning_rate:
+                        #     extra_log += ", mean_learn_rate={}".format(current_optimizer.mean_learning_rate)
+
+                        # if current_optimizer.mean_gradient:
+                        #     extra_log += ", mean_gradient={}".format(current_optimizer.mean_gradient)
 
                         logger.debug("epoch={}, index={}, need_time={}{}".format(i + 1, index, need_time, extra_log))
 
@@ -328,14 +367,17 @@ class Network(object):
 
         model = {}
 
-        # Save layer size.
-        model['layer_size'] = len(self.layers)
-
         # Save parameters of each layer.
+        model['layer_size'] = len(self.layers)
         for i in range(len(self.layers)):
             model['layer_%d_weights' % (i + 1)] = self.layers[i].weights
             model['layer_%d_bias' % (i + 1)] = self.layers[i].bias
             model['layer_%d_act_func' % (i + 1)] = self.layers[i].act_func.value
+
+        # Save training history.
+        model['training_round'] = len(self.optimizers)
+        for i in range(len(self.optimizers)):
+            model['optimizer_at_training_round_%d' % (i + 1)] = self.optimizers[i].as_nd_array()
 
         numpy.savez(file_path, **model)
         logger.info('Parameters of neural network are saved as file: %s' % file_path)
@@ -352,6 +394,12 @@ class Network(object):
             bias = model['layer_%d_bias' % (i + 1)]
             act_func = ActFunc(model['layer_%d_act_func' % (i + 1)])
             self.add_layer(Layer(weights.shape[0], weights.shape[1], act_func, weights, bias))
+
+        training_round = model['training_round']
+        for i in range(training_round):
+            opt_params = model['optimizer_at_training_round_%d' % (i + 1)]
+            self.optimizers.append(Optimizer(nd_array=opt_params))
+            logger.info('Pre-training was done: {}'.format(self.optimizers[-1]))
 
         self.is_trained = True
         logger.info('Parameters were loaded.')
