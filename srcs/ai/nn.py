@@ -317,7 +317,7 @@ class Network(object):
                 current_cnt = i * self.data_set.TRAIN_SIZE + j * batch_size + len(data)
                 process_bar.update(len(data[0]))
 
-                if j % 100 == 0 or len(data[0]) != batch_size:
+                if j % 500 == 0 or len(data[0]) != batch_size:
                     with numpy.printoptions(linewidth=numpy.inf):
                         used_time = time.time() - start_time
 
@@ -337,12 +337,6 @@ class Network(object):
                         if print_variance:
                             output_var = [layer.get_output_var() for layer in self.layers]
                             extra_log += ", output_variance={}".format(output_var)
-
-                        # if current_optimizer.mean_learning_rate:
-                        #     extra_log += ", mean_learn_rate={}".format(current_optimizer.mean_learning_rate)
-
-                        # if current_optimizer.mean_gradient:
-                        #     extra_log += ", mean_gradient={}".format(current_optimizer.mean_gradient)
 
                         logger.debug("epoch={}, index={}, need_time={}{}".format(i + 1, index, need_time, extra_log))
 
