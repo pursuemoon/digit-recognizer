@@ -26,7 +26,7 @@ class OptType(enum.IntEnum):
 
 class Optimizer(object):
     def __init__(self, opt_type=None, max_epoch=None, learning_rate=None, batch_size=None,
-                 momentum_coef=None, rms_coef=None, epsilon=None, nd_array=None):
+                 regular_coef = None, momentum_coef=None, rms_coef=None, epsilon=None, nd_array=None):
         if nd_array is None:
             assert isinstance(opt_type, OptType), "opt_type must be of enum type of OptType"
 
@@ -38,35 +38,38 @@ class Optimizer(object):
         self.max_epoch = max_epoch if nd_array is None else int(nd_array[1])
         self.learning_rate = learning_rate if nd_array is None else nd_array[2]
         self.batch_size = batch_size if nd_array is None else nd_array[3]
+        self.regular_coef = regular_coef if nd_array is None else nd_array[4]
 
         if self.opt_type == OptType.Momentum:
             if nd_array is None:
                 assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
-            self.momentum_coef = momentum_coef if nd_array is None else nd_array[4]
+            self.momentum_coef = momentum_coef if nd_array is None else nd_array[5]
         elif self.opt_type == OptType.AdaGrad:
             if nd_array is None:
                 assert epsilon > 0, "epsilon must be greater than 0"
-            self.epsilon = epsilon if nd_array is None else nd_array[4]
+            self.epsilon = epsilon if nd_array is None else nd_array[5]
         elif self.opt_type == OptType.RmsProp:
             if nd_array is None:
                 assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
                 assert epsilon > 0, "epsilon must be greater than 0"
-            self.rms_coef = rms_coef if nd_array is None else nd_array[4]
-            self.epsilon = epsilon if nd_array is None else nd_array[5]
+            self.rms_coef = rms_coef if nd_array is None else nd_array[5]
+            self.epsilon = epsilon if nd_array is None else nd_array[6]
         elif self.opt_type == OptType.Adam:
             if nd_array is None:
                 assert 0 < momentum_coef < 1, "momentum_coef must be between 0 and 1"
                 assert 0 < rms_coef < 1, "rms_coef must be between 0 and 1"
                 assert epsilon > 0, "epsilon must be greater than 0"
-            self.momentum_coef = momentum_coef if nd_array is None else nd_array[4]
-            self.rms_coef = rms_coef if nd_array is None else nd_array[5]
-            self.epsilon = epsilon if nd_array is None else nd_array[6]
+            self.momentum_coef = momentum_coef if nd_array is None else nd_array[5]
+            self.rms_coef = rms_coef if nd_array is None else nd_array[6]
+            self.epsilon = epsilon if nd_array is None else nd_array[7]
 
     def mark_not_finish(self):
         self.max_epoch = -1
 
     def __str__(self):
-        params_log = '[{}] max_epoch={}, learning_rate={}, batch_size={}'.format(self.opt_type.name, self.max_epoch, self.learning_rate, self.batch_size)
+        params_log = '[{}] max_epoch={}, learning_rate={}, batch_size={}, regular_coef={}'.format(
+            self.opt_type.name, self.max_epoch, self.learning_rate, self.batch_size, self.regular_coef
+        )
 
         if self.opt_type == OptType.Momentum:
             params_log += ', momentum_coef={}'.format(self.momentum_coef)
@@ -80,7 +83,7 @@ class Optimizer(object):
         return params_log
 
     def as_nd_array(self):
-        params = [self.opt_type, self.max_epoch, self.learning_rate, self.batch_size]
+        params = [self.opt_type, self.max_epoch, self.learning_rate, self.batch_size, self.regular_coef]
         if self.opt_type == OptType.Momentum:
             params.append(self.momentum_coef)
         elif self.opt_type == OptType.AdaGrad:
@@ -95,7 +98,8 @@ class Optimizer(object):
         return numpy.array(params, numpy.float64)
 
     def as_short_name(self):
-        common_params = "{}E-{}s-{}-{}".format(self.max_epoch, self.batch_size, self.opt_type.name, self.learning_rate)
+        common_params = "{}E-{}s-{}-{}-{}R".format(self.max_epoch, self.batch_size, self.opt_type.name,
+                                                  self.learning_rate, self.regular_coef)
 
         special_params = ""
         if self.opt_type == OptType.Momentum:
@@ -185,11 +189,12 @@ class Layer(object):
     def update_parameters(self, learning_rate, optimizer, step, last_layer, x_input):
         # Update parameters by back-propogation.
         layer_input = last_layer.output if last_layer else x_input
+        batch_size = len(layer_input)
 
         gradient = numpy.zeros_like(self.weights)
-        for idx in range(len(layer_input)):
+        for idx in range(batch_size):
             gradient += numpy.atleast_2d(layer_input[idx]).T * self.delta[idx]
-        gradient /= len(layer_input)
+        gradient /= batch_size
 
         if optimizer.opt_type == OptType.Momentum:
             self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
@@ -212,8 +217,9 @@ class Layer(object):
             opt_learning_rate = learning_rate
             opt_gradient = gradient
 
-        self.weights -= opt_learning_rate * opt_gradient
-        self.bias -= learning_rate * numpy.mean(self.delta, axis=0)
+        # Gradient descent, using L2-Regularization.
+        self.weights -= opt_learning_rate * (opt_gradient + optimizer.regular_coef / batch_size * self.weights)
+        self.bias -= learning_rate * (numpy.mean(self.delta, axis=0) + optimizer.regular_coef / batch_size * self.bias)
 
     def get_output_std(self):
         return numpy.std(self.output)
@@ -255,13 +261,14 @@ class Network(object):
         self.optimizers[-1].mark_not_finish()
         logger.info('Training is being early stoped.')
 
-    def train(self, max_epoch, learning_rate, opt_type=OptType.MiniBatch,
+    def train(self, max_epoch, learning_rate, regular_coef=0, opt_type=OptType.MiniBatch,
               batch_size=20, momentum_coef=0.9, rms_coef=0.999, epsilon=1e-7,
               **kwargs):
         self.__validate(self.data_set.DIMENSIONS)
 
         # Initialize the current optimizer and its associated values.
-        current_optimizer = Optimizer(opt_type, max_epoch, learning_rate, batch_size, momentum_coef, rms_coef, epsilon)
+        current_optimizer = Optimizer(opt_type=opt_type, max_epoch=max_epoch, learning_rate=learning_rate, batch_size=batch_size,
+                                      regular_coef=regular_coef, momentum_coef=momentum_coef, rms_coef=rms_coef, epsilon=epsilon)
         self.optimizers.append(current_optimizer)
         for layer in self.layers:
             layer.init_optimization_value(current_optimizer)
