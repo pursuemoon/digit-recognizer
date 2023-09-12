@@ -1,7 +1,6 @@
 # -- coding: utf-8 --
 
 import os
-import enum
 import numpy
 import tqdm
 import time
@@ -12,17 +11,9 @@ from utils.env import Env
 from utils.time import human_readable_time
 from utils.file import prepare_directory
 
-from ai.calc import apply_activation, apply_activation_derivative, ActFunc
+from ai.layer import LayerType, LinearLayer, Conv2dLayer
+from ai.calc import apply_activation, apply_activation_derivative, ActFunc, OptType
 
-
-# Optimizers. For the hyperparameters used by different optimizers, see the implementations.
-
-class OptType(enum.IntEnum):
-    MiniBatch = 100,
-    Momentum  = 200,
-    AdaGrad   = 300,
-    RmsProp   = 400,
-    Adam      = 500,
 
 class Optimizer(object):
     def __init__(self, opt_type=None, max_epoch=None, learning_rate=None, batch_size=None,
@@ -114,119 +105,6 @@ class Optimizer(object):
         name = "[{}]-[{}]".format(common_params, special_params)
         return name
 
-# Layer of Neural Network.
-
-class Layer(object):
-    def __init__(self, input_dim, output_dim, act_func=None, weights=None, bias=None, random_seed=None):
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-
-        if random_seed:
-            numpy.random.seed(random_seed)
-
-        if act_func is not None:
-            assert isinstance(act_func, ActFunc), "act_func must be of enum type of ActFunc"
-            self.act_func = act_func
-        else:
-            self.act_func = ActFunc.Identity
-
-        d_0 = apply_activation_derivative(apply_activation(0, self.act_func), self.act_func)
-        xavier_gain = numpy.sqrt(2) if d_0 == 0 else 1 / d_0
-
-        if weights is not None:
-            assert input_dim == weights.shape[0], "weights.shape[0] must be equal to input_dim"
-            assert output_dim == weights.shape[1], "weights.shape[1] must be equal to output_dim"
-            self.weights = weights
-        else:
-            # 1. Xavier Uniform Initialization
-            # limit = numpy.sqrt(6 / (input_dim + output_dim))
-            # self.weights = numpy.random.uniform(-limit, limit, size=(input_dim, output_dim)) * xavier_gain
-
-            # 2. Xavier Normal Initialization
-            self.weights = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=(input_dim, output_dim)) * xavier_gain
-
-        if bias is not None:
-            assert output_dim == bias.shape[0], "bias.shape[0] must be equal to output_dim"
-            self.bias = bias
-        else:
-            # 1. Xavier Uniform Initialization
-            # limit = numpy.sqrt(6 / (input_dim + output_dim))
-            # self.bias = numpy.random.uniform(-limit, limit, size=output_dim) * xavier_gain
-
-            # 2. Xavier Normal Initialization
-            self.bias = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=output_dim) * xavier_gain
-
-        self.output = None
-        self.error = None
-        self.delta = None
-
-    def init_optimization_value(self, optimizer):
-        if optimizer.opt_type == OptType.Momentum:
-            self.momentum = numpy.zeros_like(self.weights)
-        elif optimizer.opt_type == OptType.AdaGrad:
-            self.descent_square_sum = numpy.zeros_like(self.weights)
-        elif optimizer.opt_type == OptType.RmsProp:
-            self.descent_square_sum = numpy.zeros_like(self.weights)
-        elif optimizer.opt_type == OptType.Adam:
-            self.momentum = numpy.zeros_like(self.weights)
-            self.descent_square_sum = numpy.zeros_like(self.weights)
-
-    def calculate_forward(self, x):
-        # Calcuate outputs on each layer.
-        tmp = numpy.dot(x, self.weights) + self.bias
-        self.output = apply_activation(tmp, self.act_func)
-
-    def propagate_backward(self, next_layer, y_output):
-        # Calculate errors from the next layer.
-        if not next_layer:
-            self.error = self.output - y_output
-        else:
-            self.error = numpy.dot(next_layer.delta, next_layer.weights.T)
-
-        # Calculate deltas of this layer.
-        self.delta = self.error * apply_activation_derivative(self.output, self.act_func)
-    
-    def update_parameters(self, learning_rate, optimizer, step, last_layer, x_input):
-        # Update parameters by back-propogation.
-        layer_input = last_layer.output if last_layer else x_input
-        batch_size = len(layer_input)
-
-        gradient = numpy.zeros_like(self.weights)
-        for idx in range(batch_size):
-            gradient += numpy.atleast_2d(layer_input[idx]).T * self.delta[idx]
-        gradient /= batch_size
-
-        if optimizer.opt_type == OptType.Momentum:
-            self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
-            opt_learning_rate = learning_rate
-            opt_gradient = self.momentum
-        elif optimizer.opt_type == OptType.AdaGrad:
-            self.descent_square_sum += numpy.square(gradient)
-            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
-            opt_gradient = gradient
-        elif optimizer.opt_type == OptType.RmsProp:
-            self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
-            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
-            opt_gradient = gradient
-        elif optimizer.opt_type == OptType.Adam:
-            self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
-            self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
-            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum / (1 - pow(optimizer.rms_coef, step)) + optimizer.epsilon)
-            opt_gradient = self.momentum / (1 - pow(optimizer.momentum_coef, step))
-        else:
-            opt_learning_rate = learning_rate
-            opt_gradient = gradient
-
-        # Gradient descent, using L2-Regularization.
-        self.weights -= opt_learning_rate * (opt_gradient + optimizer.regular_coef / batch_size * self.weights)
-        self.bias -= learning_rate * (numpy.mean(self.delta, axis=0) + optimizer.regular_coef / batch_size * self.bias)
-
-    def get_output_std(self):
-        return numpy.std(self.output)
-
-    def get_output_var(self):
-        return numpy.var(self.output)
-
 
 # Neural Network.
 
@@ -243,18 +121,39 @@ class Network(object):
         signal.signal(signal.SIGINT, self.__sigint_handler)
 
     def add_layer(self, layer):
-        logger.info('Adding layer-{}: weights.shape={}, act_func={}'.format(len(self.layers) + 1, layer.weights.shape, layer.act_func.name))
+        logger.info('Adding layer-{}: {}'.format(len(self.layers) + 1, layer.get_abstract()))
         self.layers.append(layer)
 
-    def __validate(self, nn_input_dim):
+    def __validate(self, nn_input_dimensions):
         layer_size = len(self.layers)
-        assert layer_size > 0, "at least 1 layer is needed"
-        assert nn_input_dim == self.layers[0].input_dim, "nn_input_dim must be equal to that of first layer"
+        assert layer_size > 0, "At least 1 layer is needed"
+
+        if self.layers[0].type == LayerType.Linear:
+            assert numpy.prod(nn_input_dimensions) == self.layers[0].input_dim, "Invalid input dim of first layer"
+        elif self.layers[0].type == LayerType.Conv2d:
+            assert nn_input_dimensions == self.layers[0].input_shape, "Invalid input shape of first layer"
+        else:
+            assert False, "Invalid layer type of first layer"
+
         for i in range(layer_size):
+            layer = self.layers[i]
             if i > 0:
-                assert self.layers[i].input_dim == self.layers[i - 1].output_dim, "input_dim of current layer must be equal to output_dim of last layer"
+                last_layer = self.layers[i - 1]
+                if last_layer.type == LayerType.Linear and layer.type == LayerType.Linear:
+                    assert last_layer.output_dim == layer.input_dim, \
+                        "input_dim of current layer [{}] must be equal to output_dim of last layer [{}]".format(layer.type.name, last_layer.type.name)
+                elif last_layer.type == LayerType.Conv2d and layer.type == LayerType.Conv2d:
+                    assert last_layer.filter_num == layer.input_shape[0], \
+                        "input_shape[0] of current layer [{}] must be equal to filter_num of last layer [{}]".format(layer.type.name, last_layer.type.name)
+                elif last_layer.type == LayerType.Conv2d and layer.type == LayerType.Pooling:
+                    logger.warn('Pass validation: [{}] -> [{}]'.format(last_layer.type.name, layer.type.name))
+                elif last_layer.type == LayerType.Conv2d and layer.type == LayerType.Linear:
+                    assert last_layer.output_dim == layer.input_dim, \
+                        "input_dim of current layer [{}] must be equal to output_dim of last layer [{}]".format(layer.type.name, last_layer.type.name)
+                else:
+                    assert False, 'Invalid combination: [{}] -> [{}]'.format(last_layer.type.name, layer.type.name)
             if i < layer_size - 1:
-                assert self.layers[i].act_func != ActFunc.Softmax, "softmax is only allowed as activation function on the last layer"
+                assert layer.act_func != ActFunc.Softmax, "Softmax is only allowed as activation function on the last layer"
 
     def __sigint_handler(self, signum, frame):
         self.is_being_stoped = True
@@ -267,15 +166,15 @@ class Network(object):
         self.__validate(self.data_set.DIMENSIONS)
 
         # Initialize the current optimizer and its associated values.
-        current_optimizer = Optimizer(opt_type=opt_type, max_epoch=max_epoch, learning_rate=learning_rate, batch_size=batch_size,
-                                      regular_coef=regular_coef, momentum_coef=momentum_coef, rms_coef=rms_coef, epsilon=epsilon)
-        self.optimizers.append(current_optimizer)
+        optimizer = Optimizer(opt_type=opt_type, max_epoch=max_epoch, learning_rate=learning_rate, batch_size=batch_size,
+                              regular_coef=regular_coef, momentum_coef=momentum_coef, rms_coef=rms_coef, epsilon=epsilon)
+        self.optimizers.append(optimizer)
         for layer in self.layers:
-            layer.init_optimization_value(current_optimizer)
+            layer.init_optimization_value(optimizer)
 
         self.is_trained = False
 
-        logger.info('Training started: {}'.format(current_optimizer))
+        logger.info('Training started: {}'.format(optimizer))
         start_time = time.time()
 
         layer_size = len(self.layers)
@@ -305,21 +204,16 @@ class Network(object):
                     else:
                         self.layers[k].calculate_forward(self.layers[k - 1].output)
 
-                for k in reversed(range(layer_size)):
-                    # Info of next layer.
-                    next_layer = None if k == layer_size - 1 else self.layers[k + 1]
+                # Calculate the delta of each layer through recursion.
+                for k in reversed(range(1, layer_size)):
+                    last_layer = self.layers[k - 1]
                     final_answer = y_train if k == layer_size - 1 else None
 
-                    # Apply backward propogation.
-                    self.layers[k].propagate_backward(next_layer, final_answer)
+                    self.layers[k].propagate_backward(last_layer, final_answer)
                 
+                # Update parameters of each layer.
                 for k in reversed(range(layer_size)):
-                    # Info of last layer.
-                    last_layer = None if k == 0 else self.layers[k - 1]
-                    origin_input = x_train if k == 0 else None
-
-                    # Update parameters.
-                    self.layers[k].update_parameters(learning_rate, current_optimizer, step, last_layer, origin_input)
+                    self.layers[k].update_parameters(learning_rate, optimizer, step)
 
                 current_cnt = i * self.data_set.TRAIN_SIZE + j * batch_size + len(data)
                 process_bar.update(len(data[0]))
@@ -367,25 +261,32 @@ class Network(object):
         x_test = self.data_set.normalize(data[0])
         y_test = self.data_set.onehot_encode(data[1])
 
-        for j in range(len(x_test)):
-            for k in range(layer_size):
-                if k == 0:
-                    self.layers[k].calculate_forward(x_test[j])
-                else:
-                    self.layers[k].calculate_forward(self.layers[k - 1].output)
-            ans = numpy.argmax(self.layers[layer_size - 1].output)
-            std = numpy.argmax(y_test[j])
-            if ans == std:
-                cnt_correct += 1
+        for k in range(layer_size):
+            if k == 0:
+                self.layers[k].calculate_forward(x_test)
+            else:
+                self.layers[k].calculate_forward(self.layers[k - 1].output)
 
+        ans = numpy.argmax(self.layers[layer_size - 1].output, axis=1)
+        std = numpy.argmax(y_test, axis=1)
+        cnt_correct = numpy.sum(ans == std)
         correct_rate = cnt_correct / len(y_test)
+
         return correct_rate
 
     def save_as_file(self, file_name=None, auto_name=False):
         if not file_name:
             if auto_name:
                 pretrain_mark = 'Pre-' if len(self.optimizers) > 1 else ''
-                structure = '-'.join(['{}-{}'.format(layer.output_dim, layer.act_func.name) for layer in self.layers])
+                layers = []
+                for layer in self.layers:
+                    if layer.type == LayerType.Linear:
+                        layers.append('[Linear-{}-{}]'.format(layer.output_dim, layer.act_func.name))
+                    if layer.type == LayerType.Conv2d:
+                        layers.append('[Conv-{}-{}-{}]'.format(layer.kernel_size, layer.filter_num, layer.act_func.name))
+                    if layer.type == LayerType.Pooling:
+                        layers.append('[Pool]')
+                structure = '-'.join(layers)
                 optimizer = self.optimizers[-1]
                 file_name = '{}[{}]-{}.npz'.format(pretrain_mark, structure, optimizer.as_short_name())
             else:
@@ -398,9 +299,16 @@ class Network(object):
         # Save parameters of each layer.
         model['layer_size'] = len(self.layers)
         for i in range(len(self.layers)):
-            model['layer_%d_weights' % (i + 1)] = self.layers[i].weights
-            model['layer_%d_bias' % (i + 1)] = self.layers[i].bias
-            model['layer_%d_act_func' % (i + 1)] = self.layers[i].act_func.value
+            layer = self.layers[i]
+            model['layer_%d_type' % (i + 1)] = layer.type
+            if layer.type == LayerType.Linear:
+                model['layer_%d_weights' % (i + 1)] = layer.weights
+                model['layer_%d_bias' % (i + 1)] = layer.bias
+                model['layer_%d_act_func' % (i + 1)] = layer.act_func.value
+            if layer.type == LayerType.Conv2d:
+                logger.warn('Conv2dLayer is not saved yet.')
+            if layer.type == LayerType.Pooling:
+                logger.warn('PoolingLayer is not saved yet.')
 
         # Save training history.
         model['training_round'] = len(self.optimizers)
@@ -421,7 +329,7 @@ class Network(object):
             weights = model['layer_%d_weights' % (i + 1)]
             bias = model['layer_%d_bias' % (i + 1)]
             act_func = ActFunc(model['layer_%d_act_func' % (i + 1)])
-            self.add_layer(Layer(weights.shape[0], weights.shape[1], act_func, weights, bias))
+            self.add_layer(LinearLayer(weights.shape[0], weights.shape[1], act_func, weights, bias))
 
         training_round = model['training_round']
         for i in range(training_round):

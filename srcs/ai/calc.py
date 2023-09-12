@@ -98,6 +98,16 @@ def apply_activation_derivative(x, act_func):
         return 1
 
 
+# Optimizers. For the hyperparameters used by different optimizers, see the implementations.
+
+class OptType(enum.IntEnum):
+    MiniBatch = 100,
+    Momentum  = 200,
+    AdaGrad   = 300,
+    RmsProp   = 400,
+    Adam      = 500,
+
+
 # Plotting graphs of different activation functions.
 
 if __name__ == "__main__":

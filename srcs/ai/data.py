@@ -21,7 +21,7 @@ class MnistDataSet(object):
     TEST_IMAGE_FILE = "t10k-images-idx3-ubyte.gz"
     TEST_LABEL_FILE = "t10k-labels-idx1-ubyte.gz"
 
-    DIMENSIONS = 28 * 28
+    DIMENSIONS = (1, 28, 28)
     TRAIN_SIZE = 60000
     TEST_SIZE = 10000
 
@@ -45,7 +45,7 @@ class MnistDataSet(object):
         with gzip.open(image_path, 'rb') as fh:
             contents = fh.read()
             images = numpy.frombuffer(contents, numpy.uint8, size * 28 * 28, 16)
-            images = images.reshape(size, 28 * 28)
+            images = images.reshape(size, 1 * 28 * 28)
             logger.debug('Images loaded: shape={}'.format(images.shape))
         return images
 
@@ -90,3 +90,13 @@ class MnistDataSet(object):
                 lbl_list = []
         if len(img_list) > 0:
             yield self.normalize(numpy.array(img_list)), self.onehot_encode(numpy.array(lbl_list), 10)
+
+
+if __name__ == '__main__':
+    data_generator = MnistDataSet().data_generator(10)
+    for idx, data in enumerate(data_generator):
+        x_train = data[0]
+        y_train = data[1]
+        print(x_train.shape)
+        print(y_train.shape)
+        break
