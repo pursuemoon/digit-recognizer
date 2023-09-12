@@ -26,18 +26,18 @@ def unfold_kernels(kernel_weights, input_shape, stride):
     assert len(kernel_weights.shape) == 4
     assert input_shape[0] == kernel_weights.shape[1], "channel number is expected to be equal among input and kernels"
 
-    filter_num = int(kernel_weights.shape[0])
-    channel_num = int(kernel_weights.shape[1])
-    kernel_height = int(kernel_weights.shape[2])
-    kernel_width = int(kernel_weights.shape[3])
+    filter_num = kernel_weights.shape[0]
+    channel_num = kernel_weights.shape[1]
+    kernel_height = kernel_weights.shape[2]
+    kernel_width = kernel_weights.shape[3]
 
-    input_height = int(input_shape[1])
-    input_width = int(input_shape[2])
-    output_height = int((input_height - kernel_height) / stride + 1)
-    output_width = int((input_width - kernel_width) / stride + 1)
+    input_height = input_shape[1]
+    input_width = input_shape[2]
+    output_height = (input_height - kernel_height) // stride + 1
+    output_width = (input_width - kernel_width) // stride + 1
 
-    matrix_height = int(output_height * output_width)
-    matrix_width = int(channel_num * input_height * input_width)
+    matrix_height = output_height * output_width
+    matrix_width = channel_num * input_height * input_width
 
     kernel_matrices_t = numpy.zeros(shape=(filter_num, matrix_height, matrix_width))
     for f in range(filter_num):
@@ -53,7 +53,7 @@ def unfold_kernels(kernel_weights, input_shape, stride):
     return kernel_matrices_t
 
 def conv_2d(x_2d, k_2d, stride):
-    result = numpy.zeros(shape=(int((x_2d.shape[0]-k_2d.shape[0])/stride + 1), int((x_2d.shape[1]-k_2d.shape[1])/stride + 1)))
+    result = numpy.zeros(shape=((x_2d.shape[0]-k_2d.shape[0])//stride + 1, (x_2d.shape[1]-k_2d.shape[1])//stride + 1))
     rh = result.shape[0]
     rw = result.shape[1]
     for i in range(rh):
@@ -72,7 +72,7 @@ def conv_simple(x, kernels, stride):
     filter_num = kernels.shape[0]
     channel_num = kernels.shape[1]
 
-    result = numpy.zeros(shape=(filter_num, int((x.shape[1]-kernels.shape[1])/stride + 1), int((x.shape[2]-kernels.shape[3])/stride + 1)))
+    result = numpy.zeros(shape=(filter_num, (x.shape[1]-kernels.shape[1])//stride + 1, (x.shape[2]-kernels.shape[3])//stride + 1))
     for f in range(filter_num):
         for c in range(channel_num):
             result[f] += conv_2d(x[c], kernels[f][c], stride)
@@ -87,7 +87,7 @@ def conv_linearly(x, kernels, stride):
     assert x.shape[0] == kernels.shape[1]
 
     filter_num = kernels.shape[0]
-    output_shape=(filter_num, int((x.shape[1]-kernels.shape[1])/stride + 1), int((x.shape[2]-kernels.shape[3])/stride + 1))
+    output_shape=(filter_num, (x.shape[1]-kernels.shape[1])//stride + 1, (x.shape[2]-kernels.shape[3])//stride + 1)
 
     kernel_matrices = numpy.array([k.T for k in unfold_kernels(kernels, x.shape, stride)])
     input_dim = numpy.prod(x.shape)
@@ -106,8 +106,8 @@ def img2col(x, kernel_shape, stride):
 
     channel_num = x.shape[0]
     kernel_dim = kernel_shape[2] * kernel_shape[3]
-    output_height = int((x.shape[1] - kernel_shape[2]) / stride + 1)
-    output_width = int((x.shape[2] - kernel_shape[3]) / stride + 1)
+    output_height = (x.shape[1] - kernel_shape[2]) // stride + 1
+    output_width = (x.shape[2] - kernel_shape[3]) // stride + 1
 
     result = numpy.zeros(shape=(kernel_dim * channel_num, output_height * output_width))
     for i in range(output_height):
@@ -289,8 +289,8 @@ class Conv2dLayer(AbstractLayer):
         self.stride = stride
         self.padding = padding
 
-        output_height = int((input_shape[1] - kernel_size + 2 * padding) / stride + 1)
-        output_width = int((input_shape[2] - kernel_size + 2 * padding) / stride + 1)
+        output_height = (input_shape[1] - kernel_size + 2 * padding) // stride + 1
+        output_width = (input_shape[2] - kernel_size + 2 * padding) // stride + 1
 
         self.output_shape = (filter_num, output_height, output_width)
         self.output_dim = numpy.prod(self.output_shape)
@@ -421,8 +421,8 @@ if __name__ == '__main__':
     km = numpy.array([k.T for k in unfold_kernels(a, (2,3+2*padding,3+2*padding), stride)])
     print('kernel=\n{}\n'.format(a))
 
-    oh = int((x.shape[1] - a.shape[2] + padding * 2) / stride + 1)
-    ow = int((x.shape[2] - a.shape[3] + padding * 2) / stride + 1)
+    oh = (x.shape[1] - a.shape[2] + padding * 2) // stride + 1
+    ow = (x.shape[2] - a.shape[3] + padding * 2) // stride + 1
 
     # Convolution method 1: kernel matrix transformation.
     y1 = numpy.dot(px.reshape((1, px.size)), km).reshape((len(a), oh, ow))
