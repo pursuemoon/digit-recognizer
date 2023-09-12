@@ -135,8 +135,8 @@ class AbstractLayer(object):
         self.output_dim = None
         self.output = None
 
-    def init_optimization_value(self, optimizer):
-        pass
+        self.momentum = None
+        self.descent_square_sum = None
 
     def calculate_forward(self, x):
         # input dimensions: (batch_size, input_dim)
@@ -148,6 +148,41 @@ class AbstractLayer(object):
     
     def update_parameters(self, learning_rate, optimizer, step):
         pass
+
+    def init_optimization_value(self, optimizer):
+        if optimizer.opt_type == OptType.Momentum:
+            self.momentum = numpy.zeros_like(self.weights)
+        elif optimizer.opt_type == OptType.AdaGrad:
+            self.descent_square_sum = numpy.zeros_like(self.weights)
+        elif optimizer.opt_type == OptType.RmsProp:
+            self.descent_square_sum = numpy.zeros_like(self.weights)
+        elif optimizer.opt_type == OptType.Adam:
+            self.momentum = numpy.zeros_like(self.weights)
+            self.descent_square_sum = numpy.zeros_like(self.weights)
+
+    def optimize(self, optimizer, learning_rate, gradient, step):
+        if optimizer.opt_type == OptType.Momentum:
+            self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
+            opt_learning_rate = learning_rate
+            opt_gradient = self.momentum
+        elif optimizer.opt_type == OptType.AdaGrad:
+            self.descent_square_sum += numpy.square(gradient)
+            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
+            opt_gradient = gradient
+        elif optimizer.opt_type == OptType.RmsProp:
+            self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
+            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
+            opt_gradient = gradient
+        elif optimizer.opt_type == OptType.Adam:
+            self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
+            self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
+            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum / (1 - pow(optimizer.rms_coef, step)) + optimizer.epsilon)
+            opt_gradient = self.momentum / (1 - pow(optimizer.momentum_coef, step))
+        else:
+            opt_learning_rate = learning_rate
+            opt_gradient = gradient
+
+        return opt_learning_rate, opt_gradient
 
 
 # Linear Layer of Neural Network.
@@ -200,17 +235,6 @@ class LinearLayer(AbstractLayer):
     def get_abstract(self):
         return 'Linear => weights.shape={}, act_func={}'.format(self.weights.shape, self.act_func.name)
 
-    def init_optimization_value(self, optimizer):
-        if optimizer.opt_type == OptType.Momentum:
-            self.momentum = numpy.zeros_like(self.weights)
-        elif optimizer.opt_type == OptType.AdaGrad:
-            self.descent_square_sum = numpy.zeros_like(self.weights)
-        elif optimizer.opt_type == OptType.RmsProp:
-            self.descent_square_sum = numpy.zeros_like(self.weights)
-        elif optimizer.opt_type == OptType.Adam:
-            self.momentum = numpy.zeros_like(self.weights)
-            self.descent_square_sum = numpy.zeros_like(self.weights)
-
     def calculate_forward(self, x):
         # Calculate outputs on each layer.
         self.input = x
@@ -236,26 +260,8 @@ class LinearLayer(AbstractLayer):
             gradient += numpy.atleast_2d(self.input[idx]).T * self.delta[idx]
         gradient /= batch_size
 
-        if optimizer.opt_type == OptType.Momentum:
-            self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
-            opt_learning_rate = learning_rate
-            opt_gradient = self.momentum
-        elif optimizer.opt_type == OptType.AdaGrad:
-            self.descent_square_sum += numpy.square(gradient)
-            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
-            opt_gradient = gradient
-        elif optimizer.opt_type == OptType.RmsProp:
-            self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
-            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
-            opt_gradient = gradient
-        elif optimizer.opt_type == OptType.Adam:
-            self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
-            self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
-            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum / (1 - pow(optimizer.rms_coef, step)) + optimizer.epsilon)
-            opt_gradient = self.momentum / (1 - pow(optimizer.momentum_coef, step))
-        else:
-            opt_learning_rate = learning_rate
-            opt_gradient = gradient
+        # Perform optimization.
+        opt_learning_rate, opt_gradient = self.optimize(optimizer, learning_rate, gradient, step)
 
         # Gradient descent, using L2-Regularization.
         self.weights -= opt_learning_rate * (opt_gradient + optimizer.regular_coef / batch_size * self.weights)
@@ -330,9 +336,6 @@ class Conv2dLayer(AbstractLayer):
         return 'Conv2d => input_shape={}, kernel_size={}, filter_num={}, act_func={}'.format(
             self.input_shape, self.kernel_size, self.filter_num, self.act_func.name)
 
-    def init_optimization_value(self, optimizer):
-        pass
-
     def calculate_forward(self, x):
         batch_size = x.shape[0]
         channel_num = self.input_shape[0]
@@ -385,26 +388,8 @@ class Conv2dLayer(AbstractLayer):
             gradient += numpy.dot(f_delta, linear_input.T).reshape(self.weights.shape)
         gradient /= batch_size
 
-        if optimizer.opt_type == OptType.Momentum:
-            self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
-            opt_learning_rate = learning_rate
-            opt_gradient = self.momentum
-        elif optimizer.opt_type == OptType.AdaGrad:
-            self.descent_square_sum += numpy.square(gradient)
-            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
-            opt_gradient = gradient
-        elif optimizer.opt_type == OptType.RmsProp:
-            self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
-            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
-            opt_gradient = gradient
-        elif optimizer.opt_type == OptType.Adam:
-            self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
-            self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
-            opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum / (1 - pow(optimizer.rms_coef, step)) + optimizer.epsilon)
-            opt_gradient = self.momentum / (1 - pow(optimizer.momentum_coef, step))
-        else:
-            opt_learning_rate = learning_rate
-            opt_gradient = gradient
+        # Perform optimization.
+        opt_learning_rate, opt_gradient = self.optimize(optimizer, learning_rate, gradient, step)
 
         # Gradient descent, using L2-Regularization.
         self.weights -= opt_learning_rate * (opt_gradient + optimizer.regular_coef / batch_size * self.weights)

@@ -30,8 +30,8 @@ if __name__ == "__main__":
         'print_cross_entropy': False,
         'print_variance': False,
     }
-    network.train(max_epoch=3, learning_rate=0.1, regular_coef=0.000,
-                  opt_type=OptType.MiniBatch, batch_size=100, momentum_coef=0.99, rms_coef=0.999, epsilon=1e-8,
+    network.train(max_epoch=3, learning_rate=0.001, regular_coef=0.000,
+                  opt_type=OptType.Adam, batch_size=10, momentum_coef=0.99, rms_coef=0.999, epsilon=1e-8,
                   **kwargs)
     # network.save_as_file(auto_name=True)
 
