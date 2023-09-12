@@ -402,6 +402,18 @@ class Conv2dLayer(AbstractLayer):
         self.kernel_matrices_t = unfold_kernels(self.weights, self.pad_input_shape, self.stride)
         self.kernel_matrices = numpy.array([kernel_t.T for kernel_t in self.kernel_matrices_t])
 
+# Pooling Layer of Neural Network.
+
+class PoolingType(enum.IntEnum):
+    Max     = 1,
+    Min     = 2,
+    Average = 3,
+
+class PoolingLayer(AbstractLayer):
+    def __init__(self, pool_type, window_size):
+        super().__init__(LayerType.Pooling)
+        self.pool_type = pool_type
+        self.window_size = window_size
 
 if __name__ == '__main__':
     numpy.set_printoptions(linewidth=300)
