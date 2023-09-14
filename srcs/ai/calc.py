@@ -197,6 +197,9 @@ class Optimizer(object):
         name = "[{}]-[{}]".format(common_params, special_params)
         return name
 
+class PoolType(enum.IntEnum):
+    Max     = 1,
+
 
 # Plotting graphs of different activation functions.
 

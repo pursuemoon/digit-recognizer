@@ -12,7 +12,7 @@ from utils.time import human_readable_time
 from utils.file import prepare_directory
 
 from ai.layer import LayerType, LinearLayer, Conv2dLayer, PoolingLayer
-from ai.calc import ActFunc, OptType, Optimizer
+from ai.calc import ActFunc, PoolType, OptType, Optimizer
 
 
 # Neural Network.
@@ -41,8 +41,11 @@ class Network(object):
             assert numpy.prod(nn_input_dimensions) == self.layers[0].input_dim, "Invalid input dim of first layer"
         elif self.layers[0].type == LayerType.Conv2d:
             assert nn_input_dimensions == self.layers[0].input_shape, "Invalid input shape of first layer"
+        elif self.layers[0].type == LayerType.Pooling:
+            assert nn_input_dimensions == self.layers[0].input_shape, "Invalid input shape of first layer"
         else:
-            assert False, "Invalid layer type of first layer"
+            logger.error("Invalid layer type of first layer: {}".format(self.layers[0].type.name))
+            assert False
 
         for i in range(layer_size):
             layer = self.layers[i]
@@ -50,15 +53,22 @@ class Network(object):
                 last_layer = self.layers[i - 1]
                 if last_layer.type == LayerType.Linear and layer.type == LayerType.Linear:
                     assert last_layer.output_dim == layer.input_dim, \
-                        "input_dim of current layer [{}] must be equal to output_dim of last layer [{}]".format(layer.type.name, last_layer.type.name)
+                        "input_dim of No.{} layer [{}] must be equal to output_dim of last layer [{}]".format(i+1, layer.type.name, last_layer.type.name)
                 elif last_layer.type == LayerType.Conv2d and layer.type == LayerType.Conv2d:
                     assert last_layer.filter_num == layer.input_shape[0], \
-                        "input_shape[0] of current layer [{}] must be equal to filter_num of last layer [{}]".format(layer.type.name, last_layer.type.name)
+                        "input_shape[0] of No.{} layer [{}] must be equal to filter_num of last layer [{}]".format(i+1, layer.type.name, last_layer.type.name)
                 elif last_layer.type == LayerType.Conv2d and layer.type == LayerType.Pooling:
-                    logger.warn('Pass validation: [{}] -> [{}]'.format(last_layer.type.name, layer.type.name))
+                    assert last_layer.output_shape == layer.input_shape, \
+                        "input_shape of No.{} layer [{}] must be equal to output_shape of last layer [{}]".format(i+1, layer.type.name, last_layer.type.name)
                 elif last_layer.type == LayerType.Conv2d and layer.type == LayerType.Linear:
                     assert last_layer.output_dim == layer.input_dim, \
-                        "input_dim of current layer [{}] must be equal to output_dim of last layer [{}]".format(layer.type.name, last_layer.type.name)
+                        "input_dim of No.{} layer [{}] must be equal to output_dim of last layer [{}]".format(i+1, layer.type.name, last_layer.type.name)
+                elif last_layer.type == LayerType.Pooling and layer.type == LayerType.Linear:
+                    assert last_layer.output_dim == layer.input_dim, \
+                        "input_dim of No.{} layer [{}] must be equal to output_dim of last layer [{}]".format(i+1, layer.type.name, last_layer.type.name)
+                elif last_layer.type == LayerType.Pooling and layer.type == LayerType.Conv2d:
+                    assert last_layer.output_shape == layer.input_shape, \
+                        "input_shape of No.{} layer [{}] must be equal to output_shape of last layer [{}]".format(i+1, layer.type.name, last_layer.type.name)
                 else:
                     assert False, 'Invalid combination: [{}] -> [{}]'.format(last_layer.type.name, layer.type.name)
             if i < layer_size - 1:
@@ -109,13 +119,13 @@ class Network(object):
                 y_train = data[1]
                 for k in range(layer_size):
                     if k == 0:
-                        self.layers[k].calculate_forward(x_train)
+                        self.layers[k].calculate_forward(x_train, True)
                     else:
-                        self.layers[k].calculate_forward(self.layers[k - 1].output)
+                        self.layers[k].calculate_forward(self.layers[k - 1].output, True)
 
                 # Calculate the delta of each layer through recursion.
-                for k in reversed(range(1, layer_size)):
-                    last_layer = self.layers[k - 1]
+                for k in reversed(range(layer_size)):
+                    last_layer = self.layers[k - 1] if k > 0 else None
                     final_answer = y_train if k == layer_size - 1 else None
 
                     self.layers[k].propagate_backward(last_layer, final_answer)
@@ -159,27 +169,35 @@ class Network(object):
         end_time = time.time()
         logger.info('Training ended. Time used: {}'.format(human_readable_time(end_time - start_time)))
 
-    def test(self):
+    def test(self, case_num=None):
         assert self.is_trained, "neural network must be trained first before using it"
+
+        start_time = time.time()
+        case_num = self.data_set.TEST_SIZE if case_num is None else case_num
+        logger.info("Test started: case_num={}".format(case_num))
 
         cnt_correct = 0
         layer_size = len(self.layers)
 
         data = self.data_set.load_test_data()
 
-        x_test = self.data_set.normalize(data[0])
-        y_test = self.data_set.onehot_encode(data[1])
+        x_test = self.data_set.normalize(data[0])[:case_num]
+        y_test = self.data_set.onehot_encode(data[1])[:case_num]
 
         for k in range(layer_size):
             if k == 0:
-                self.layers[k].calculate_forward(x_test)
+                self.layers[k].calculate_forward(x_test, False)
             else:
-                self.layers[k].calculate_forward(self.layers[k - 1].output)
+                self.layers[k].calculate_forward(self.layers[k - 1].output, False)
 
         ans = numpy.argmax(self.layers[layer_size - 1].output, axis=1)
         std = numpy.argmax(y_test, axis=1)
         cnt_correct = numpy.sum(ans == std)
         correct_rate = cnt_correct / len(y_test)
+
+        end_time = time.time()
+        logger.info('Test ended. Time used: {}'.format(human_readable_time(end_time - start_time)))
+        logger.info("correct_rate=%f" % correct_rate)
 
         return correct_rate
 
@@ -192,9 +210,9 @@ class Network(object):
                     if layer.type == LayerType.Linear:
                         layers.append('[Linear-{}-{}]'.format(layer.output_dim, layer.act_func.name))
                     if layer.type == LayerType.Conv2d:
-                        layers.append('[Conv-{}-{}-{}]'.format(layer.kernel_size, layer.filter_num, layer.act_func.name))
+                        layers.append('[Conv-{}k-{}f-{}s-{}p-{}]'.format(layer.kernel_size, layer.filter_num, layer.stride, layer.padding, layer.act_func.name))
                     if layer.type == LayerType.Pooling:
-                        layers.append('[Pool]')
+                        layers.append('[Pool]-{}w-{}s'.format(layer.window_size, layer.stride))
                 structure = '-'.join(layers)
                 optimizer = self.optimizers[-1]
                 file_name = '{}[{}]-{}.npz'.format(pretrain_mark, structure, optimizer.as_short_name())
@@ -211,13 +229,25 @@ class Network(object):
             layer = self.layers[i]
             model['layer_%d_type' % (i + 1)] = layer.type
             if layer.type == LayerType.Linear:
+                model['layer_%d_input_dim' % (i + 1)] = layer.input_dim
+                model['layer_%d_output_dim' % (i + 1)] = layer.output_dim
                 model['layer_%d_weights' % (i + 1)] = layer.weights
                 model['layer_%d_bias' % (i + 1)] = layer.bias
                 model['layer_%d_act_func' % (i + 1)] = layer.act_func.value
             if layer.type == LayerType.Conv2d:
-                logger.warn('Conv2dLayer is not saved yet.')
+                model['layer_%d_input_shape' % (i + 1)] = layer.input_shape
+                model['layer_%d_kernel_size' % (i + 1)] = layer.kernel_size
+                model['layer_%d_filter_num' % (i + 1)] = layer.filter_num
+                model['layer_%d_stride' % (i + 1)] = layer.stride
+                model['layer_%d_padding' % (i + 1)] = layer.padding
+                model['layer_%d_weights' % (i + 1)] = layer.weights
+                model['layer_%d_bias' % (i + 1)] = layer.bias
+                model['layer_%d_act_func' % (i + 1)] = layer.act_func.value
             if layer.type == LayerType.Pooling:
-                logger.warn('PoolingLayer is not saved yet.')
+                model['layer_%d_input_shape' % (i + 1)] = layer.input_shape
+                model['layer_%d_window_size' % (i + 1)] = layer.window_size
+                model['layer_%d_stride' % (i + 1)] = layer.stride
+                model['layer_%d_pool_type' % (i + 1)] = layer.pool_type
 
         # Save training history.
         model['training_round'] = len(self.optimizers)
@@ -235,16 +265,46 @@ class Network(object):
 
         layer_size = model['layer_size']
         for i in range(layer_size):
-            weights = model['layer_%d_weights' % (i + 1)]
-            bias = model['layer_%d_bias' % (i + 1)]
-            act_func = ActFunc(model['layer_%d_act_func' % (i + 1)])
-            self.add_layer(LinearLayer(weights.shape[0], weights.shape[1], act_func, weights, bias))
+            type = model['layer_%d_type' % (i + 1)]
+
+            if type == LayerType.Linear:
+                input_dim = model['layer_%d_input_dim' % (i + 1)]
+                output_dim = model['layer_%d_output_dim' % (i + 1)]
+
+                weights = model['layer_%d_weights' % (i + 1)]
+                bias = model['layer_%d_bias' % (i + 1)]
+                act_func = ActFunc(model['layer_%d_act_func' % (i + 1)])
+
+                self.add_layer(LinearLayer(input_dim=input_dim, output_dim=output_dim, act_func=act_func,
+                                           weights=weights, bias=bias))
+            if type == LayerType.Conv2d:
+                input_shape = tuple(model['layer_%d_input_shape' % (i + 1)])
+                kernel_size = model['layer_%d_kernel_size' % (i + 1)]
+                filter_num = model['layer_%d_filter_num' % (i + 1)]
+                stride = model['layer_%d_stride' % (i + 1)]
+                padding = model['layer_%d_padding' % (i + 1)]
+
+                weights = model['layer_%d_weights' % (i + 1)]
+                bias = model['layer_%d_bias' % (i + 1)]
+                act_func = ActFunc(model['layer_%d_act_func' % (i + 1)])
+
+                self.add_layer(Conv2dLayer(input_shape=input_shape, kernel_size=kernel_size,
+                                           filter_num=filter_num, stride=stride, padding=padding,
+                                           act_func=act_func, weights=weights, bias=bias))
+
+            if type == LayerType.Pooling:
+                input_shape = tuple(model['layer_%d_input_shape' % (i + 1)])
+                window_size = model['layer_%d_window_size' % (i + 1)]
+                stride = model['layer_%d_stride' % (i + 1)]
+                pool_type = PoolType(model['layer_%d_pool_type' % (i + 1)])
+
+                self.add_layer(PoolingLayer(input_shape=input_shape, window_size=window_size, stride=stride, pool_type=pool_type))
 
         training_round = model['training_round']
         for i in range(training_round):
             opt_params = model['optimizer_at_training_round_%d' % (i + 1)]
             self.optimizers.append(Optimizer(nd_array=opt_params))
-            logger.info('Pre-training was done: {}'.format(self.optimizers[-1]))
+            logger.info('Pre-trained: {}'.format(self.optimizers[-1]))
 
         self.is_trained = True
         logger.info('Parameters were loaded.')

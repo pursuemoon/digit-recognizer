@@ -5,7 +5,7 @@ import enum
 
 from utils.log import logger
 
-from ai.calc import apply_activation, apply_activation_derivative, ActFunc, OptType
+from ai.calc import apply_activation, apply_activation_derivative, ActFunc, OptType, PoolType
 
 def pad_input(im, padding):
     '''
@@ -138,7 +138,7 @@ class AbstractLayer(object):
         self.momentum = None
         self.descent_square_sum = None
 
-    def calculate_forward(self, x):
+    def calculate_forward(self, x, train_mode):
         # input dimensions: (batch_size, input_dim)
         # output dimensions: (batch_size, output_dim)
         pass
@@ -150,6 +150,9 @@ class AbstractLayer(object):
         pass
 
     def init_optimization_value(self, optimizer):
+        if self.type == LayerType.Pooling:
+            return
+
         if optimizer.opt_type == OptType.Momentum:
             self.momentum = numpy.zeros_like(self.weights)
         elif optimizer.opt_type == OptType.AdaGrad:
@@ -161,6 +164,9 @@ class AbstractLayer(object):
             self.descent_square_sum = numpy.zeros_like(self.weights)
 
     def optimize(self, optimizer, learning_rate, gradient, step):
+        if self.type == LayerType.Pooling:
+            return
+
         if optimizer.opt_type == OptType.Momentum:
             self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
             opt_learning_rate = learning_rate
@@ -233,11 +239,13 @@ class LinearLayer(AbstractLayer):
         self.delta = None
 
     def get_abstract(self):
-        return 'Linear => weights.shape={}, act_func={}'.format(self.weights.shape, self.act_func.name)
+        return 'Linear => input_dim={}, output_dim={}, act_func={}'.format(self.input_dim, self.output_dim, self.act_func.name)
 
-    def calculate_forward(self, x):
+    def calculate_forward(self, x, train_mode):
         # Calculate outputs on each layer.
-        self.input = x
+        if train_mode:
+            self.input = x
+
         tmp = numpy.dot(x, self.weights) + self.bias
         self.output = apply_activation(tmp, self.act_func)
 
@@ -248,8 +256,9 @@ class LinearLayer(AbstractLayer):
             self.delta = self.error * apply_activation_derivative(self.output, self.act_func)
 
         # Propagate the delta to the previous layer.
-        last_layer.error = numpy.dot(self.delta, self.weights.T)
-        last_layer.delta = last_layer.error * apply_activation_derivative(last_layer.output, last_layer.act_func)
+        if last_layer is not None:
+            last_layer.error = numpy.dot(self.delta, self.weights.T)
+            last_layer.delta = last_layer.error * apply_activation_derivative(last_layer.output, last_layer.act_func)
     
     def update_parameters(self, learning_rate, optimizer, step):
         # Update parameters by back-propogation.
@@ -309,6 +318,8 @@ class Conv2dLayer(AbstractLayer):
 
         # weights is an ndarray with 4 dimensions: (filter number, channel number, kernel height, kernel width).
         if weights is not None:
+            assert weights.shape == (filter_num, channel_num, kernel_size, kernel_size), \
+                "weights_shape must be equal to (filter_num, kernel_size, kernel_size)"
             self.weights = weights
         else:
             self.weights = numpy.random.normal(0, numpy.sqrt(1 / (filter_dim)), size=(filter_num, channel_num, kernel_size, kernel_size))
@@ -321,6 +332,7 @@ class Conv2dLayer(AbstractLayer):
         self.kernel_matrices = numpy.array([kernel_t.T for kernel_t in self.kernel_matrices_t])
 
         if bias is not None:
+            assert bias.shape == (filter_num), "bias_shape must be equal to (filter_num)"
             self.bias = bias
         else:
             self.bias = numpy.random.normal(0, numpy.sqrt(1 / (filter_dim)), size=filter_num)
@@ -333,10 +345,10 @@ class Conv2dLayer(AbstractLayer):
         self.delta = None
 
     def get_abstract(self):
-        return 'Conv2d => input_shape={}, kernel_size={}, filter_num={}, act_func={}'.format(
-            self.input_shape, self.kernel_size, self.filter_num, self.act_func.name)
+        return 'Conv2d => input_shape={}, kernel_size={}, filter_num={}, stride={}, padding={}, act_func={}'.format(
+            self.input_shape, self.kernel_size, self.filter_num, self.stride, self.padding, self.act_func.name)
 
-    def calculate_forward(self, x):
+    def calculate_forward(self, x, train_mode):
         batch_size = x.shape[0]
         channel_num = self.input_shape[0]
 
@@ -356,7 +368,8 @@ class Conv2dLayer(AbstractLayer):
         else:
             px = numpy.reshape(x, newshape=(batch_size, p_dim))
 
-        self.input = px
+        if train_mode:
+            self.input = px
 
         # Perform covolution by linear transformation.
         tmp = numpy.dot(px, self.kernel_matrices)
@@ -370,8 +383,9 @@ class Conv2dLayer(AbstractLayer):
 
     def propagate_backward(self, last_layer, y_output):
         # Since Conv2dLayer must not be the final layer, just propagate the delta to the previous layer.
-        last_layer.error = numpy.dot(self.delta, self.kernel_matrices_t.reshape(self.output_dim, self.input_dim))
-        last_layer.delta = last_layer.error * apply_activation_derivative(last_layer.output, last_layer.act_func)
+        if last_layer is not None:
+            last_layer.error = numpy.dot(self.delta, self.kernel_matrices_t.reshape(self.output_dim, self.input_dim))
+            last_layer.delta = last_layer.error * apply_activation_derivative(last_layer.output, last_layer.act_func)
     
     def update_parameters(self, learning_rate, optimizer, step):
         # Update parameters by back-propogation.
@@ -404,17 +418,71 @@ class Conv2dLayer(AbstractLayer):
 
 # Pooling Layer of Neural Network.
 
-class PoolingType(enum.IntEnum):
-    Max     = 1,
-    Min     = 2,
-    Average = 3,
-
 class PoolingLayer(AbstractLayer):
-    def __init__(self, pool_type, window_size):
-        super().__init__(LayerType.Pooling)
-        self.pool_type = pool_type
-        self.window_size = window_size
+    def __init__(self, input_shape, window_size, stride, pool_type):
+        super().__init__(LayerType.Pooling, ActFunc.Identity)
+        self.input_shape = input_shape
+        self.input_dim = numpy.prod(input_shape)
 
+        self.window_size = window_size
+        self.stride = stride
+        self.pool_type = pool_type
+
+        self.output_shape = (input_shape[0], (input_shape[1]-window_size)//stride+1, (input_shape[2]-window_size)//stride+1)
+        self.output_dim = numpy.prod(self.output_shape)
+
+    def get_abstract(self):
+        return 'Pooling => input_shape={}, window_size={}, stride={}, pool_type={}'.format(
+            self.input_shape, self.window_size, self.stride, self.pool_type.name)
+
+    def calculate_forward(self, x, train_mode):
+        batch_size = len(x)
+
+        if train_mode:
+            self.input = x
+            pos_matrix_height = self.output_shape[1] * self.output_shape[2]
+            pos_matrix_width = self.input_shape[1] * self.input_shape[2]
+            self.pos_matrices = numpy.zeros(shape=(batch_size, self.output_shape[0], pos_matrix_height, pos_matrix_width))
+
+        result = numpy.zeros(shape=(batch_size, *self.output_shape))
+
+        if self.pool_type == PoolType.Max:
+            px = x.reshape(batch_size, *self.input_shape)
+            for n in range(batch_size):
+                for c in range(self.output_shape[0]):
+                    idx = 0
+                    for i in range(self.output_shape[1]):
+                        for j in range(self.output_shape[2]):
+                            mx = result[n][c][i][j] = numpy.max(px[n, c, i:i+self.window_size, j:j+self.window_size])
+
+                            if train_mode:
+                                mlist = []
+                                for p in range(self.window_size):
+                                    for q in range(self.window_size):
+                                        if px[n][c][i+p][j+q] == mx:
+                                            mlist.append((i+p, j+q))
+                                for pos in mlist:
+                                    self.pos_matrices[n][c][idx][pos[0]*self.input_shape[2] + pos[1]] = 1 / len(mlist)
+                                idx += 1
+
+        self.output = result.reshape(batch_size, self.output_dim)
+
+    def propagate_backward(self, last_layer, y_output):
+        # Since PoolingLayer must not be the final layer, just propagate the delta to the previous layer.
+        batch_size = len(self.input)
+        channel_num = self.input_shape[0]
+        channel_dim = numpy.prod(self.output_shape[1:])
+        last_channel_dim = numpy.prod(self.input_shape[1:])
+
+        error = numpy.zeros(shape=(batch_size, channel_num, last_channel_dim))
+        for n in range(batch_size):
+            for c in range(channel_num):
+                error[n][c] = numpy.dot(self.delta.reshape(batch_size, channel_num, channel_dim)[n][c], self.pos_matrices[n][c])
+
+        if last_layer is not None:
+            last_layer.error = error.reshape(batch_size, last_layer.output_dim)
+            last_layer.delta = last_layer.error * apply_activation_derivative(last_layer.output, last_layer.act_func)
+    
 if __name__ == '__main__':
     numpy.set_printoptions(linewidth=300)
 
