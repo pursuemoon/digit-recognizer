@@ -212,7 +212,7 @@ class Network(object):
                     if layer.type == LayerType.Conv2d:
                         layers.append('[Conv-{}k-{}f-{}s-{}p-{}]'.format(layer.kernel_size, layer.filter_num, layer.stride, layer.padding, layer.act_func.name))
                     if layer.type == LayerType.Pooling:
-                        layers.append('[Pool]-{}w-{}s'.format(layer.window_size, layer.stride))
+                        layers.append('[Pool-{}w-{}s]'.format(layer.window_size, layer.stride))
                 structure = '-'.join(layers)
                 optimizer = self.optimizers[-1]
                 file_name = '{}[{}]-{}.npz'.format(pretrain_mark, structure, optimizer.as_short_name())
@@ -259,7 +259,8 @@ class Network(object):
 
     def load_from_file(self, file_name='default.npz'):
         file_path = os.path.join(prepare_directory(Env.MODEL_DIR), file_name)
-        assert os.path.exists(file_path), "there is no such model file: file_path=%s" % file_path
+        assert os.path.exists(file_path), "There is no such model file: file_path=%s" % file_path
+        assert len(self.layers) == 0, "Model is loaded"
 
         model = numpy.load(file_path)
 
