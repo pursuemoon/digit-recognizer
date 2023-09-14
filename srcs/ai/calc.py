@@ -198,7 +198,8 @@ class Optimizer(object):
         return name
 
 class PoolType(enum.IntEnum):
-    Max     = 1,
+    Average = 100,
+    Max     = 200,
 
 
 # Plotting graphs of different activation functions.
