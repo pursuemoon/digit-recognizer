@@ -135,6 +135,9 @@ class AbstractLayer(object):
         self.output_dim = None
         self.output = None
 
+        self.weights = None
+        self.bias = None
+
         self.momentum = None
         self.descent_square_sum = None
 
@@ -155,40 +158,70 @@ class AbstractLayer(object):
 
         if optimizer.opt_type == OptType.Momentum:
             self.momentum = numpy.zeros_like(self.weights)
+            self.bias_momentum = numpy.zeros_like(self.bias)
         elif optimizer.opt_type == OptType.AdaGrad:
             self.descent_square_sum = numpy.zeros_like(self.weights)
+            self.bias_descent_square_sum = numpy.zeros_like(self.bias)
         elif optimizer.opt_type == OptType.RmsProp:
             self.descent_square_sum = numpy.zeros_like(self.weights)
+            self.bias_descent_square_sum = numpy.zeros_like(self.bias)
         elif optimizer.opt_type == OptType.Adam:
             self.momentum = numpy.zeros_like(self.weights)
+            self.bias_momentum = numpy.zeros_like(self.bias)
             self.descent_square_sum = numpy.zeros_like(self.weights)
+            self.bias_descent_square_sum = numpy.zeros_like(self.bias)
 
-    def optimize(self, optimizer, learning_rate, gradient, step):
+    def optimize(self, optimizer, learning_rate, gradient, bias_gradient, step):
         if self.type == LayerType.Pooling:
             return
 
         if optimizer.opt_type == OptType.Momentum:
             self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
+            self.bias_momentum = optimizer.momentum_coef * self.bias_momentum + (1 - optimizer.momentum_coef) * bias_gradient
+
             opt_learning_rate = learning_rate
+            opt_bias_learning_rate = learning_rate
+
             opt_gradient = self.momentum
+            opt_bias_gradient = self.bias_momentum
         elif optimizer.opt_type == OptType.AdaGrad:
             self.descent_square_sum += numpy.square(gradient)
+            self.bias_descent_square_sum += numpy.square(bias_gradient)
+
             opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
+            opt_bias_learning_rate = learning_rate / numpy.sqrt(self.bias_descent_square_sum + optimizer.epsilon)
+
             opt_gradient = gradient
+            opt_bias_gradient = bias_gradient
         elif optimizer.opt_type == OptType.RmsProp:
             self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
+            self.bias_descent_square_sum = optimizer.rms_coef * self.bias_descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(bias_gradient)
+
             opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum + optimizer.epsilon)
+            opt_bias_learning_rate = learning_rate / numpy.sqrt(self.bias_descent_square_sum + optimizer.epsilon)
+
             opt_gradient = gradient
+            opt_bias_gradient = bias_gradient
         elif optimizer.opt_type == OptType.Adam:
             self.momentum = optimizer.momentum_coef * self.momentum + (1 - optimizer.momentum_coef) * gradient
+            self.bias_momentum = optimizer.momentum_coef * self.bias_momentum + (1 - optimizer.momentum_coef) * bias_gradient
+
             self.descent_square_sum = optimizer.rms_coef * self.descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(gradient)
+            self.bias_descent_square_sum = optimizer.rms_coef * self.bias_descent_square_sum + (1 - optimizer.rms_coef) * numpy.square(bias_gradient)
+
             opt_learning_rate = learning_rate / numpy.sqrt(self.descent_square_sum / (1 - pow(optimizer.rms_coef, step)) + optimizer.epsilon)
+            opt_bias_learning_rate = learning_rate / numpy.sqrt(self.bias_descent_square_sum / (1 - pow(optimizer.rms_coef, step)) + optimizer.epsilon)
+
             opt_gradient = self.momentum / (1 - pow(optimizer.momentum_coef, step))
+            opt_bias_gradient = self.bias_momentum / (1 - pow(optimizer.momentum_coef, step))
         else:
             opt_learning_rate = learning_rate
-            opt_gradient = gradient
+            opt_bias_learning_rate = learning_rate / numpy.sqrt(self.bias_descent_square_sum + optimizer.epsilon)
 
-        return opt_learning_rate, opt_gradient
+            opt_gradient = gradient
+            opt_bias_gradient = bias_gradient
+
+        return opt_learning_rate, opt_gradient, opt_bias_learning_rate, opt_bias_gradient
 
 
 # Linear Layer of Neural Network.
@@ -269,12 +302,20 @@ class LinearLayer(AbstractLayer):
             gradient += numpy.atleast_2d(self.input[idx]).T * self.delta[idx]
         gradient /= batch_size
 
+        bias_gradient = numpy.mean(self.delta, axis=0)
+
         # Perform optimization.
-        opt_learning_rate, opt_gradient = self.optimize(optimizer, learning_rate, gradient, step)
+        ret = self.optimize(optimizer, learning_rate, gradient, bias_gradient, step)
+
+        opt_learning_rate = ret[0]
+        opt_gradient = ret[1]
+
+        opt_bias_learning_rate = ret[2]
+        opt_bias_gradient = ret[3]
 
         # Gradient descent, using L2-Regularization.
         self.weights -= opt_learning_rate * (opt_gradient + optimizer.regular_coef / batch_size * self.weights)
-        self.bias -= learning_rate * (numpy.mean(self.delta, axis=0) + optimizer.regular_coef / batch_size * self.bias)
+        self.bias -= opt_bias_learning_rate * (opt_bias_gradient + optimizer.regular_coef / batch_size * self.bias)
 
     def get_output_std(self):
         return numpy.std(self.output)
@@ -402,14 +443,21 @@ class Conv2dLayer(AbstractLayer):
             gradient += numpy.dot(f_delta, linear_input.T).reshape(self.weights.shape)
         gradient /= batch_size
 
+        bias_gradient = numpy.mean(numpy.sum(self.delta.reshape(batch_size, self.filter_num, numpy.prod(self.output_shape[1:])), axis=2), axis=0)
+
         # Perform optimization.
-        opt_learning_rate, opt_gradient = self.optimize(optimizer, learning_rate, gradient, step)
+        ret = self.optimize(optimizer, learning_rate, gradient, bias_gradient, step)
+
+        opt_learning_rate = ret[0]
+        opt_gradient = ret[1]
+
+        opt_bias_learning_rate = ret[2]
+        opt_bias_gradient = ret[3]
 
         # Gradient descent, using L2-Regularization.
         self.weights -= opt_learning_rate * (opt_gradient + optimizer.regular_coef / batch_size * self.weights)
 
-        bias_gradient = numpy.mean(numpy.sum(self.delta.reshape(batch_size, self.filter_num, numpy.prod(self.output_shape[1:])), axis=2), axis=0)
-        self.bias -= learning_rate * (bias_gradient + optimizer.regular_coef / batch_size * self.bias)
+        self.bias -= opt_bias_learning_rate * (opt_bias_gradient + optimizer.regular_coef / batch_size * self.bias)
         self.bias_matrix = numpy.repeat(numpy.atleast_2d(self.bias).T, axis=1, repeats=numpy.prod(self.output_shape[1:]))
 
         # Update the kernel matrix and its transposation.
