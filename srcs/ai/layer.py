@@ -142,7 +142,10 @@ class AbstractLayer(object):
         self.bias = None
 
         self.momentum = None
+        self.bias_momentum = None
+
         self.descent_square_sum = None
+        self.bias_descent_square_sum = None
 
     def calculate_forward(self, x, train_mode):
         # input dimensions: (batch_size, input_dim)
@@ -318,7 +321,7 @@ class LinearLayer(AbstractLayer):
 
         # Gradient descent, using L2-Regularization.
         self.weights -= opt_learning_rate * (opt_gradient + optimizer.regular_coef / batch_size * self.weights)
-        self.bias -= opt_bias_learning_rate * (opt_bias_gradient + optimizer.regular_coef / batch_size * self.bias)
+        self.bias -= opt_bias_learning_rate * opt_bias_gradient
 
     def get_output_std(self):
         return numpy.std(self.output)
@@ -460,7 +463,7 @@ class Conv2dLayer(AbstractLayer):
         # Gradient descent, using L2-Regularization.
         self.weights -= opt_learning_rate * (opt_gradient + optimizer.regular_coef / batch_size * self.weights)
 
-        self.bias -= opt_bias_learning_rate * (opt_bias_gradient + optimizer.regular_coef / batch_size * self.bias)
+        self.bias -= opt_bias_learning_rate * opt_bias_gradient
         self.bias_matrix = numpy.repeat(numpy.atleast_2d(self.bias).T, axis=1, repeats=numpy.prod(self.output_shape[1:]))
 
         # Update the kernel matrix and its transposation.
