@@ -2,9 +2,12 @@
 
 import numpy
 import enum
+import threading
+import multiprocessing
+
+from concurrent.futures import ThreadPoolExecutor, wait
 
 from utils.log import logger
-
 from ai.calc import apply_activation, apply_activation_derivative, ActFunc, OptType, PoolType
 
 def pad_input(im, padding):
@@ -481,53 +484,71 @@ class PoolingLayer(AbstractLayer):
 
         self.pos_matrices = None
 
+        self.core_cnt = min(16, multiprocessing.cpu_count())
+        self.thread_pool = ThreadPoolExecutor(max_workers=self.core_cnt)
+
     def get_abstract(self):
         return 'Pooling => input_shape={}, window_size={}, stride={}, pool_type={}'.format(
             self.input_shape, self.window_size, self.stride, self.pool_type.name)
 
     def calculate_forward(self, x, train_mode):
         batch_size = len(x)
+        channel_num = self.output_shape[0]
+
+        output_height = self.output_shape[1]
+        output_width = self.output_shape[2]
 
         if train_mode:
             self.input = x
             pos_matrix_height = self.output_shape[1] * self.output_shape[2]
             pos_matrix_width = self.input_shape[1] * self.input_shape[2]
-            self.pos_matrices = numpy.zeros(shape=(batch_size, self.output_shape[0], pos_matrix_height, pos_matrix_width))
+            self.pos_matrices = numpy.zeros(shape=(batch_size, channel_num, pos_matrix_height, pos_matrix_width))
 
         px = x.reshape(batch_size, *self.input_shape)
         result = numpy.zeros(shape=(batch_size, *self.output_shape))
 
-        if self.pool_type == PoolType.Average:
-            window_mean = 1 / (self.window_size**2)
-            for n in range(batch_size):
-                for c in range(self.output_shape[0]):
-                    idx = 0
-                    for i in range(self.output_shape[1]):
-                        for j in range(self.output_shape[2]):
-                            mx = result[n][c][i][j] = numpy.mean(px[n, c, i:i+self.window_size, j:j+self.window_size])
+        def parallel_fill(channel_range):
+            if self.pool_type == PoolType.Average:
+                window_mean = 1 / (self.window_size**2)
+                for n in range(batch_size):
+                    for c in channel_range:
+                        idx = 0
+                        for i in range(output_height):
+                            for j in range(output_width):
+                                mx = result[n][c][i][j] = numpy.mean(px[n, c, i:i+self.window_size, j:j+self.window_size])
 
-                            if train_mode:
-                                for p in range(i, i+self.window_size):
-                                    for q in range(j, j+self.window_size):
-                                        self.pos_matrices[n][c][idx][p*self.input_shape[2] + q] = window_mean
-                                idx += 1
-        elif self.pool_type == PoolType.Max:
-            for n in range(batch_size):
-                for c in range(self.output_shape[0]):
-                    idx = 0
-                    for i in range(self.output_shape[1]):
-                        for j in range(self.output_shape[2]):
-                            mx = result[n][c][i][j] = numpy.max(px[n, c, i:i+self.window_size, j:j+self.window_size])
+                                if train_mode:
+                                    for p in range(i, i+self.window_size):
+                                        for q in range(j, j+self.window_size):
+                                            self.pos_matrices[n][c][idx][p*self.input_shape[2] + q] = window_mean
+                                    idx += 1
+            elif self.pool_type == PoolType.Max:
+                for n in range(batch_size):
+                    for c in channel_range:
+                        idx = 0
+                        for i in range(output_height):
+                            for j in range(output_width):
+                                mx = result[n][c][i][j] = numpy.max(px[n, c, i:i+self.window_size, j:j+self.window_size])
 
-                            if train_mode:
-                                mlist = []
-                                for p in range(i, i+self.window_size):
-                                    for q in range(j, j+self.window_size):
-                                        if px[n][c][p][q] == mx:
-                                            mlist.append((p, q))
-                                for pos in mlist:
-                                    self.pos_matrices[n][c][idx][pos[0]*self.input_shape[2] + pos[1]] = 1 / len(mlist)
-                                idx += 1
+                                if train_mode:
+                                    mlist = []
+                                    for p in range(i, i+self.window_size):
+                                        for q in range(j, j+self.window_size):
+                                            if px[n][c][p][q] == mx:
+                                                mlist.append((p, q))
+                                    for pos in mlist:
+                                        self.pos_matrices[n][c][idx][pos[0]*self.input_shape[2] + pos[1]] = 1 / len(mlist)
+                                    idx += 1
+
+        dm = divmod(channel_num, self.core_cnt)
+        task_size = max(4, dm[0] if dm[1] == 0 else dm[0] + 1)
+
+        ranges = []
+        for i in range(0, channel_num, task_size):
+            ranges.append(range(i, min(channel_num, i + task_size), 1))
+
+        async_ret = [self.thread_pool.submit(parallel_fill, c_range) for c_range in ranges]
+        wait(async_ret)
 
         self.output = result.reshape(batch_size, self.output_dim)
 
