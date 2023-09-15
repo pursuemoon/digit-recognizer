@@ -229,6 +229,12 @@ class AbstractLayer(object):
 
         return opt_learning_rate, opt_gradient, opt_bias_learning_rate, opt_bias_gradient
 
+    def get_output_std(self):
+        return numpy.std(self.output)
+
+    def get_output_var(self):
+        return numpy.var(self.output)
+
 
 # Linear Layer of Neural Network.
 
@@ -256,22 +262,22 @@ class LinearLayer(AbstractLayer):
             self.weights = weights
         else:
             # 1. Xavier Uniform Initialization
-            # limit = numpy.sqrt(6 / (input_dim + output_dim))
-            # self.weights = numpy.random.uniform(-limit, limit, size=(input_dim, output_dim)) * xavier_gain
+            limit = numpy.sqrt(6 / (input_dim + output_dim))
+            self.weights = numpy.random.uniform(-limit, limit, size=(input_dim, output_dim)) * xavier_gain
 
             # 2. Xavier Normal Initialization
-            self.weights = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=(input_dim, output_dim)) * xavier_gain
+            # self.weights = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=(input_dim, output_dim)) * xavier_gain
 
         if bias is not None:
             assert output_dim == bias.shape[0], "bias.shape[0] must be equal to output_dim"
             self.bias = bias
         else:
             # 1. Xavier Uniform Initialization
-            # limit = numpy.sqrt(6 / (input_dim + output_dim))
-            # self.bias = numpy.random.uniform(-limit, limit, size=output_dim) * xavier_gain
+            limit = numpy.sqrt(6 / (input_dim + output_dim))
+            self.bias = numpy.random.uniform(-limit, limit, size=output_dim) * xavier_gain
 
             # 2. Xavier Normal Initialization
-            self.bias = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=output_dim) * xavier_gain
+            # self.bias = numpy.random.normal(0, numpy.sqrt(2 / (input_dim + output_dim)), size=output_dim) * xavier_gain
 
         self.output = None
         self.error = None
@@ -322,12 +328,6 @@ class LinearLayer(AbstractLayer):
         # Gradient descent, using L2-Regularization.
         self.weights -= opt_learning_rate * (opt_gradient + optimizer.regular_coef / batch_size * self.weights)
         self.bias -= opt_bias_learning_rate * opt_bias_gradient
-
-    def get_output_std(self):
-        return numpy.std(self.output)
-
-    def get_output_var(self):
-        return numpy.var(self.output)
 
 # Convolutional Layer of Neural Network.
 
