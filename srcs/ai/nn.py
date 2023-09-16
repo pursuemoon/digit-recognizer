@@ -169,7 +169,7 @@ class Network(object):
         end_time = time.time()
         logger.info('Training ended. Time used: {}'.format(human_readable_time(end_time - start_time)))
 
-    def test(self, case_num=None):
+    def test(self, show_mistakes=False, case_num=None):
         assert self.is_trained, "neural network must be trained first before using it"
 
         start_time = time.time()
@@ -181,24 +181,46 @@ class Network(object):
 
         data = self.data_set.load_test_data()
 
-        x_test = self.data_set.normalize(data[0])[:case_num]
-        y_test = self.data_set.onehot_encode(data[1])[:case_num]
+        x_test = self.data_set.normalize(data[0])
+        y_test = self.data_set.onehot_encode(data[1])
 
-        for k in range(layer_size):
-            if k == 0:
-                self.layers[k].calculate_forward(x_test, False)
-            else:
-                self.layers[k].calculate_forward(self.layers[k - 1].output, False)
+        cnt_correct = 0
+        mistake_imgs = []
+        mistake_lbls = []
+        mistake_rets = []
 
-        ans = numpy.argmax(self.layers[layer_size - 1].output, axis=1)
-        std = numpy.argmax(y_test, axis=1)
-        cnt_correct = numpy.sum(ans == std)
+        batch_size = 500
+        for t in range(0, case_num, batch_size):
+            begin = t
+            end = min(t + batch_size, case_num)
+
+            imgs = x_test[begin:end]
+            lbls = y_test[begin:end]
+            for k in range(layer_size):
+                if k == 0:
+                    self.layers[k].calculate_forward(imgs, False)
+                else:
+                    self.layers[k].calculate_forward(self.layers[k - 1].output, False)
+
+            ans = numpy.argmax(self.layers[layer_size - 1].output, axis=1)
+            std = numpy.argmax(lbls, axis=1)
+
+            for i in range(len(ans)):
+                if ans[i] == std[i]:
+                    cnt_correct += 1
+                else:
+                    mistake_imgs.append(imgs[i])
+                    mistake_lbls.append(std[i])
+                    mistake_rets.append(ans[i])
+
         correct_rate = cnt_correct / len(y_test)
 
         end_time = time.time()
         logger.info('Test ended. Time used: {}'.format(human_readable_time(end_time - start_time)))
         logger.info("correct_rate=%f" % correct_rate)
 
+        if show_mistakes:
+            self.data_set.show_pictures(mistake_imgs, mistake_lbls, mistake_rets)
         return correct_rate
 
     def save_as_file(self, file_name=None, auto_name=False):

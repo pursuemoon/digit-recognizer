@@ -4,6 +4,8 @@ import os
 import numpy
 import gzip
 
+import matplotlib.pyplot as plt
+
 from utils.env import Env
 from utils.log import logger
 
@@ -68,7 +70,7 @@ class MnistDataSet(object):
         test_images = self.__load_images(self.test_image_path, 10000)
         return test_images, test_labels
 
-    def data_generator(self, batch_size, random_seed=None):
+    def data_generator(self, batch_size, normalize=True, random_seed=None):
         images, labels = self.load_train_data()
         assert len(images) == len(labels), "len(images) must be equal to len(labels) when using data_generator"
 
@@ -85,18 +87,39 @@ class MnistDataSet(object):
             img_list.append(images[i])
             lbl_list.append(labels[i])
             if batch_size > 0 and len(img_list) == batch_size:
-                yield self.normalize(numpy.array(img_list)), self.onehot_encode(numpy.array(lbl_list), 10)
+                if normalize:
+                    yield self.normalize(numpy.array(img_list)), self.onehot_encode(numpy.array(lbl_list), 10)
+                else:
+                    yield numpy.array(img_list), self.onehot_encode(numpy.array(lbl_list), 10)
                 img_list = []
                 lbl_list = []
         if len(img_list) > 0:
-            yield self.normalize(numpy.array(img_list)), self.onehot_encode(numpy.array(lbl_list), 10)
+            if normalize:
+                yield self.normalize(numpy.array(img_list)), self.onehot_encode(numpy.array(lbl_list), 10)
+            else:
+                yield numpy.array(img_list), self.onehot_encode(numpy.array(lbl_list), 10)
+
+    def show_pictures(self, img_list, lbl_list, ret_list=None):
+        assert len(img_list) == len(lbl_list)
+        dm = divmod(len(img_list), 10)
+        rows = dm[0] + (0 if dm[1] == 0 else 1)
+        for i in range(len(img_list)):
+            plt.subplot(rows, 10, i+1)
+            plt.imshow(X=img_list[i].reshape(28,28), cmap='gray')
+            if ret_list is not None and i < len(ret_list):
+                plt.title('{}-{}'.format(lbl_list[i], ret_list[i]))
+            else:
+                plt.title('{}'.format(lbl_list[i]))
+            plt.axis('off')
+        plt.subplots_adjust(wspace=0.4, hspace=0.8)
+        plt.show()
 
 
 if __name__ == '__main__':
-    data_generator = MnistDataSet().data_generator(10)
+    data_set = MnistDataSet()
+    data_generator = data_set.data_generator(50, False)
     for idx, data in enumerate(data_generator):
         x_train = data[0]
         y_train = data[1]
-        print(x_train.shape)
-        print(y_train.shape)
+        data_set.show_pictures(x_train, numpy.argmax(y_train, axis=1), numpy.argmax(y_train, axis=1))
         break
