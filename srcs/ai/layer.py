@@ -222,7 +222,7 @@ class AbstractLayer(object):
             opt_bias_gradient = self.bias_momentum / (1 - pow(optimizer.momentum_coef, step))
         else:
             opt_learning_rate = learning_rate
-            opt_bias_learning_rate = learning_rate / numpy.sqrt(self.bias_descent_square_sum + optimizer.epsilon)
+            opt_bias_learning_rate = learning_rate
 
             opt_gradient = gradient
             opt_bias_gradient = bias_gradient
