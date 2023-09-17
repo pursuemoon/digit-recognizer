@@ -111,7 +111,7 @@ class Network(object):
                 break
 
             # Generate examples by batch randomly in each epoch.
-            data_generator = self.data_set.data_generator(batch_size)
+            data_generator = self.data_set.data_generator(batch_size=batch_size, data_type='train')
 
             for j, data in enumerate(data_generator):
                 step += 1
@@ -176,13 +176,7 @@ class Network(object):
         case_num = self.data_set.TEST_SIZE if case_num is None else case_num
         logger.info("Test started: case_num={}".format(case_num))
 
-        cnt_correct = 0
         layer_size = len(self.layers)
-
-        data = self.data_set.load_test_data()
-
-        x_test = self.data_set.normalize(data[0])
-        y_test = self.data_set.onehot_encode(data[1])
 
         cnt_correct = 0
         mistake_idxs = []
@@ -191,11 +185,14 @@ class Network(object):
         mistake_rets = []
 
         batch_size = 500
-        for begin in range(0, case_num, batch_size):
-            end = min(begin + batch_size, case_num)
+        data_generator = self.data_set.data_generator(batch_size=batch_size, data_type='test',
+                                                      normalize=True, onehot=False)
 
-            imgs = x_test[begin:end]
-            lbls = y_test[begin:end]
+        for idx, data in enumerate(data_generator):
+            begin = idx * batch_size
+
+            imgs = data[0]
+            lbls = data[1]
 
             for k in range(layer_size):
                 if k == 0:
@@ -204,19 +201,19 @@ class Network(object):
                     self.layers[k].calculate_forward(self.layers[k - 1].output, False)
 
             ans = numpy.argmax(self.layers[layer_size - 1].output, axis=1)
-            std = numpy.argmax(lbls, axis=1)
 
             for i in range(len(ans)):
                 idx = begin + i
-                if ans[i] == std[i]:
-                    cnt_correct += 1
-                else:
-                    mistake_idxs.append(idx)
-                    mistake_imgs.append(imgs[i])
-                    mistake_lbls.append(std[i])
-                    mistake_rets.append(ans[i])
+                if len(lbls) > 0:
+                    if ans[i] == lbls[i]:
+                        cnt_correct += 1
+                    else:
+                        mistake_idxs.append(idx)
+                        mistake_imgs.append(imgs[i])
+                        mistake_lbls.append(lbls[i])
+                        mistake_rets.append(ans[i])
 
-        correct_rate = cnt_correct / len(y_test)
+        correct_rate = cnt_correct / case_num
 
         end_time = time.time()
         logger.info('Test ended. Time used: {}'.format(human_readable_time(end_time - start_time)))

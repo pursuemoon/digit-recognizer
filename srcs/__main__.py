@@ -44,6 +44,8 @@ if __name__ == "__main__":
     # network.add_layer(LinearLayer(input_dim=20*6*6, output_dim=10, act_func=ActFunc.Softmax))
 
     # network.load_from_file('[[Conv-5k-10f-2s-1p-Relu]-[Conv-3k-20f-2s-0p-Relu]-[Linear-256-Relu]-[Linear-64-Relu]-[Linear-10-Softmax]]-[50E-10s-Adam-0.001-0.001R]-[0.99m-0.999r-1e-08e].npz')
+    # network.load_from_file('[[Conv-5k-10f-3s-1p-Relu]-[Linear-128-Relu]-[Linear-128-Relu]-[Linear-10-Softmax]]-[200E-10s-Adam-0.001-0.001R]-[0.99m-0.999r-1e-08e].npz')
+    # network.load_from_file('Pre-[[Conv-5k-10f-3s-1p-Relu]-[Linear-128-Relu]-[Linear-128-Relu]-[Linear-10-Softmax]]-[10E-10s-Adam-0.001-0.001R]-[0.99m-0.999r-1e-08e].npz')
 
     kwargs = {
         'print_mean_square_error': False,
