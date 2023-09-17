@@ -185,17 +185,18 @@ class Network(object):
         y_test = self.data_set.onehot_encode(data[1])
 
         cnt_correct = 0
+        mistake_idxs = []
         mistake_imgs = []
         mistake_lbls = []
         mistake_rets = []
 
         batch_size = 500
-        for t in range(0, case_num, batch_size):
-            begin = t
-            end = min(t + batch_size, case_num)
+        for begin in range(0, case_num, batch_size):
+            end = min(begin + batch_size, case_num)
 
             imgs = x_test[begin:end]
             lbls = y_test[begin:end]
+
             for k in range(layer_size):
                 if k == 0:
                     self.layers[k].calculate_forward(imgs, False)
@@ -206,9 +207,11 @@ class Network(object):
             std = numpy.argmax(lbls, axis=1)
 
             for i in range(len(ans)):
+                idx = begin + i
                 if ans[i] == std[i]:
                     cnt_correct += 1
                 else:
+                    mistake_idxs.append(idx)
                     mistake_imgs.append(imgs[i])
                     mistake_lbls.append(std[i])
                     mistake_rets.append(ans[i])
@@ -218,6 +221,7 @@ class Network(object):
         end_time = time.time()
         logger.info('Test ended. Time used: {}'.format(human_readable_time(end_time - start_time)))
         logger.info("correct_rate=%f" % correct_rate)
+        logger.debug('mistake_num={}: {}'.format(len(mistake_idxs), mistake_idxs))
 
         if show_mistakes:
             self.data_set.show_pictures(mistake_imgs, mistake_lbls, mistake_rets)
