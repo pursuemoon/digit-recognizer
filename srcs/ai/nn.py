@@ -43,8 +43,14 @@ class Network(object):
             assert nn_input_dimensions == self.layers[0].input_shape, "Invalid input shape of first layer"
         elif self.layers[0].type == LayerType.Pooling:
             assert nn_input_dimensions == self.layers[0].input_shape, "Invalid input shape of first layer"
+        elif self.layers[0].type == LayerType.Dropout:
+            pass
         else:
             logger.error("Invalid layer type of first layer: {}".format(self.layers[0].type.name))
+            assert False
+
+        if self.layers[layer_size - 1].type != LayerType.Linear:
+            logger.error("Invalid layer type of final layer: {}".format(self.layers[layer_size - 1].type.name))
             assert False
 
         for i in range(layer_size):
@@ -69,6 +75,8 @@ class Network(object):
                 elif last_layer.type == LayerType.Pooling and layer.type == LayerType.Conv2d:
                     assert last_layer.output_shape == layer.input_shape, \
                         "input_shape of No.{} layer [{}] must be equal to output_shape of last layer [{}]".format(i+1, layer.type.name, last_layer.type.name)
+                elif last_layer.type == LayerType.Dropout or layer.type == LayerType.Dropout:
+                    pass
                 else:
                     assert False, 'Invalid combination: [{}] -> [{}]'.format(last_layer.type.name, layer.type.name)
             if i < layer_size - 1:
@@ -242,6 +250,8 @@ class Network(object):
                         layers.append('[Conv-{}k-{}f-{}s-{}p-{}]'.format(layer.kernel_size, layer.filter_num, layer.stride, layer.padding, layer.act_func.name))
                     if layer.type == LayerType.Pooling:
                         layers.append('[Pool-{}w-{}s]'.format(layer.window_size, layer.stride))
+                    if layer.type == LayerType.Dropout:
+                        layers.append('[Dropout-{}]'.format(layer.dropout_prob))
                 structure = '-'.join(layers)
                 optimizer = self.optimizers[-1]
                 file_name = '{}[{}]-{}.npz'.format(pretrain_mark, structure, optimizer.as_short_name())

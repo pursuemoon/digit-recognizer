@@ -122,6 +122,7 @@ class LayerType(enum.IntEnum):
     Linear  = 1,
     Conv2d  = 2,
     Pooling = 3,
+    Dropout = 4,
 
 class AbstractLayer(object):
     def __init__(self, type=None, act_func=None):
@@ -555,6 +556,33 @@ class PoolingLayer(AbstractLayer):
         if last_layer is not None:
             last_layer.error = error.reshape(batch_size, last_layer.output_dim)
             last_layer.delta = last_layer.error * apply_activation_derivative(last_layer.output, last_layer.act_func)
+
+class DropoutLayer(AbstractLayer):
+    def __init__(self, dropout_prob):
+        super().__init__(LayerType.Dropout, ActFunc.Identity)
+        assert 0 <= dropout_prob <= 1, "dropout_prob must be between 0 and 1, inclussive"
+
+        self.dropout_prob = dropout_prob
+        self.retain_mask = None
+
+    def get_abstract(self):
+        return 'Dropout => dropout_prob={}'.format(self.dropout_prob)
+
+    def calculate_forward(self, x, train_mode):
+        if train_mode:
+            retain_prob = 1 - self.dropout_prob
+            self.retain_mask = numpy.random.binomial(n=1, p=retain_prob, size=x.shape) / retain_prob
+            self.output = x * self.retain_mask
+        else:
+            self.output = x
+
+    def propagate_backward(self, last_layer, y_output):
+        # Since DropoutLayer must not be the final layer, just propagate the delta to the previous layer.
+        if last_layer is not None:
+            # Rescale first.
+            self.delta = self.delta * self.retain_mask
+            # Propogate to last layer.
+            last_layer.delta = self.delta * apply_activation_derivative(last_layer.output, last_layer.act_func)
 
 
 if __name__ == '__main__':
