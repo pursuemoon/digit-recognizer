@@ -2,8 +2,12 @@
 
 import numpy
 import enum
+
 import matplotlib.pyplot as plt
 import matplotlib.widgets as widgets
+
+from concurrent.futures import ThreadPoolExecutor, wait
+from utils.env import Env
 
 # Activation Functions.
 
@@ -200,6 +204,30 @@ class Optimizer(object):
 class PoolType(enum.IntEnum):
     Average = 100,
     Max     = 200,
+
+class DefaultThreadPool(object):
+    def __init__(self):
+        self.core_cnt = Env.get_cpu_count(core_limit=16)
+        self.thread_pool = ThreadPoolExecutor(max_workers=self.core_cnt)
+
+    def submit(self, fn, *args, **kwargs):
+        return self.thread_pool.submit(fn, args, kwargs)
+
+    def wait_future(self, future):
+        return wait(future)
+
+    def parallel_execute(self, fn, total_size, max_task_size=4):
+        dm = divmod(total_size, thread_pool.core_cnt)
+        task_size = max(max_task_size, dm[0] if dm[1] == 0 else dm[0] + 1)
+
+        ranges = []
+        for i in range(0, total_size, task_size):
+            ranges.append(range(i, min(total_size, i + task_size), 1))
+
+        async_ret = [thread_pool.submit(fn, c_range) for c_range in ranges]
+        wait(async_ret)
+
+thread_pool = DefaultThreadPool()
 
 
 # Plotting graphs of different activation functions.

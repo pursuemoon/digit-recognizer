@@ -184,6 +184,11 @@ class Network(object):
         mistake_lbls = []
         mistake_rets = []
 
+        # import csv
+        # csv_file = open('file_4.csv', 'w', newline='')
+        # csv_writer = csv.writer(csv_file)
+        # csv_writer.writerow(['ImageId', 'Label'])
+
         batch_size = 500
         data_generator = self.data_set.data_generator(batch_size=batch_size, data_type='test',
                                                       normalize=True, onehot=False)
@@ -212,6 +217,7 @@ class Network(object):
                         mistake_imgs.append(imgs[i])
                         mistake_lbls.append(lbls[i])
                         mistake_rets.append(ans[i])
+                # csv_writer.writerow([idx+1, ans[i]])
 
         correct_rate = cnt_correct / case_num
 

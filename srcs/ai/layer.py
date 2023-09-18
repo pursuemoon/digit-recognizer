@@ -2,13 +2,9 @@
 
 import numpy
 import enum
-import threading
-import multiprocessing
-
-from concurrent.futures import ThreadPoolExecutor, wait
 
 from utils.log import logger
-from ai.calc import apply_activation, apply_activation_derivative, ActFunc, OptType, PoolType
+from ai.calc import apply_activation, apply_activation_derivative, ActFunc, OptType, PoolType, thread_pool
 
 def pad_input(im, padding):
     '''
@@ -487,9 +483,6 @@ class PoolingLayer(AbstractLayer):
 
         self.pos_matrices = None
 
-        self.core_cnt = min(16, multiprocessing.cpu_count())
-        self.thread_pool = ThreadPoolExecutor(max_workers=self.core_cnt)
-
     def get_abstract(self):
         return 'Pooling => input_shape={}, window_size={}, stride={}, pool_type={}'.format(
             self.input_shape, self.window_size, self.stride, self.pool_type.name)
@@ -518,7 +511,7 @@ class PoolingLayer(AbstractLayer):
                         idx = 0
                         for i in range(output_height):
                             for j in range(output_width):
-                                mx = result[n][c][i][j] = numpy.mean(px[n, c, i:i+self.window_size, j:j+self.window_size])
+                                result[n][c][i][j] = numpy.mean(px[n, c, i:i+self.window_size, j:j+self.window_size])
 
                                 if train_mode:
                                     for p in range(i, i+self.window_size):
@@ -543,15 +536,7 @@ class PoolingLayer(AbstractLayer):
                                         self.pos_matrices[n][c][idx][pos[0]*self.input_shape[2] + pos[1]] = 1 / len(mlist)
                                     idx += 1
 
-        dm = divmod(channel_num, self.core_cnt)
-        task_size = max(4, dm[0] if dm[1] == 0 else dm[0] + 1)
-
-        ranges = []
-        for i in range(0, channel_num, task_size):
-            ranges.append(range(i, min(channel_num, i + task_size), 1))
-
-        async_ret = [self.thread_pool.submit(parallel_fill, c_range) for c_range in ranges]
-        wait(async_ret)
+        thread_pool.parallel_execute(parallel_fill, channel_num, 4)
 
         self.output = result.reshape(batch_size, self.output_dim)
 
@@ -570,7 +555,8 @@ class PoolingLayer(AbstractLayer):
         if last_layer is not None:
             last_layer.error = error.reshape(batch_size, last_layer.output_dim)
             last_layer.delta = last_layer.error * apply_activation_derivative(last_layer.output, last_layer.act_func)
-    
+
+
 if __name__ == '__main__':
     numpy.set_printoptions(linewidth=300)
 
