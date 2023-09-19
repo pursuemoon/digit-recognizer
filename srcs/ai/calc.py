@@ -112,7 +112,7 @@ class OptType(enum.IntEnum):
     Adam      = 500,
 
 class Optimizer(object):
-    def __init__(self, opt_type=None, max_epoch=None, learning_rate=None, batch_size=None,
+    def __init__(self, data_name=None, opt_type=None, max_epoch=None, learning_rate=None, batch_size=None,
                  regular_coef = None, momentum_coef=None, rms_coef=None, epsilon=None, nd_array=None):
         if nd_array is None:
             assert isinstance(opt_type, OptType), "opt_type must be of enum type of OptType"
@@ -121,10 +121,12 @@ class Optimizer(object):
             assert learning_rate > 0, "learning rate must be greater than 0"
             assert batch_size > 0, "batch_size must be set and greater than 0"
 
+        self.data_name = data_name
+
         self.opt_type = opt_type if nd_array is None else OptType(int(nd_array[0]))
         self.max_epoch = max_epoch if nd_array is None else int(nd_array[1])
         self.learning_rate = learning_rate if nd_array is None else nd_array[2]
-        self.batch_size = batch_size if nd_array is None else nd_array[3]
+        self.batch_size = batch_size if nd_array is None else int(nd_array[3])
         self.regular_coef = regular_coef if nd_array is None else nd_array[4]
 
         if self.opt_type == OptType.Momentum:
@@ -154,8 +156,9 @@ class Optimizer(object):
         self.max_epoch = -1
 
     def __str__(self):
-        params_log = '[{}] max_epoch={}, learning_rate={}, batch_size={}, regular_coef={}'.format(
-            self.opt_type.name, self.max_epoch, self.learning_rate, self.batch_size, self.regular_coef
+        params_log = '[{}] [{}] max_epoch={}, learning_rate={}, batch_size={}, regular_coef={}'.format(
+            self.data_name, self.opt_type.name,
+            self.max_epoch, self.learning_rate, self.batch_size, self.regular_coef
         )
 
         if self.opt_type == OptType.Momentum:

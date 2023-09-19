@@ -12,8 +12,8 @@ from utils.log import logger
 
 
 class AbstractDataSet(object):
-    def __init__(self):
-        pass
+    def __init__(self, name=None):
+        self.name = name
 
     def _normalize(self, images):
         # Normalize input data.
@@ -106,7 +106,7 @@ class MnistDataSet(AbstractDataSet):
     TEST_SIZE = 10000
 
     def __init__(self):
-        super().__init__()
+        super().__init__(name='mnist')
         project_dir = Env.get_project_dir()
         self.train_image_path = os.path.join(project_dir, MnistDataSet.DATA_DIR, MnistDataSet.TRAIN_IMAGE_FILE)
         self.train_label_path = os.path.join(project_dir, MnistDataSet.DATA_DIR, MnistDataSet.TRAIN_LABEL_FILE)
@@ -173,7 +173,7 @@ class KaggleMnistDataSet(AbstractDataSet):
     TEST_SIZE = 28000
 
     def __init__(self):
-        super().__init__()
+        super().__init__(name='kaggle-mnist')
         project_dir = Env.get_project_dir()
         self.train_csv_path = os.path.join(project_dir, KaggleMnistDataSet.DATA_DIR, KaggleMnistDataSet.TRAIN_CSV)
         self.test_csv_path = os.path.join(project_dir, KaggleMnistDataSet.DATA_DIR, KaggleMnistDataSet.TEST_CSV)

@@ -93,8 +93,9 @@ class Network(object):
         self.__validate(self.data_set.DIMENSIONS)
 
         # Initialize the current optimizer and its associated values.
-        optimizer = Optimizer(opt_type=opt_type, max_epoch=max_epoch, learning_rate=learning_rate, batch_size=batch_size,
-                              regular_coef=regular_coef, momentum_coef=momentum_coef, rms_coef=rms_coef, epsilon=epsilon)
+        optimizer = Optimizer(data_name=self.data_set.name, opt_type=opt_type, max_epoch=max_epoch,
+                              learning_rate=learning_rate, batch_size=batch_size, regular_coef=regular_coef,
+                              momentum_coef=momentum_coef, rms_coef=rms_coef, epsilon=epsilon)
         self.optimizers.append(optimizer)
         for layer in self.layers:
             layer.init_optimization_value(optimizer)
@@ -192,11 +193,6 @@ class Network(object):
         mistake_lbls = []
         mistake_rets = []
 
-        # import csv
-        # csv_file = open('file_4.csv', 'w', newline='')
-        # csv_writer = csv.writer(csv_file)
-        # csv_writer.writerow(['ImageId', 'Label'])
-
         batch_size = 500
         data_generator = self.data_set.data_generator(batch_size=batch_size, data_type='test',
                                                       normalize=True, onehot=False)
@@ -225,7 +221,6 @@ class Network(object):
                         mistake_imgs.append(imgs[i])
                         mistake_lbls.append(lbls[i])
                         mistake_rets.append(ans[i])
-                # csv_writer.writerow([idx+1, ans[i]])
 
         correct_rate = cnt_correct / case_num
 
@@ -291,6 +286,7 @@ class Network(object):
         # Save training history.
         model['training_round'] = len(self.optimizers)
         for i in range(len(self.optimizers)):
+            model['data_set_at_training_round_%d' % (i + 1)] = self.optimizers[i].data_name
             model['optimizer_at_training_round_%d' % (i + 1)] = self.optimizers[i].as_nd_array()
 
         numpy.savez(file_path, **model)
@@ -342,8 +338,10 @@ class Network(object):
 
         training_round = model['training_round']
         for i in range(training_round):
+            data_name = str(model['data_set_at_training_round_%d' % (i + 1)])
             opt_params = model['optimizer_at_training_round_%d' % (i + 1)]
-            self.optimizers.append(Optimizer(nd_array=opt_params))
+
+            self.optimizers.append(Optimizer(data_name=data_name, nd_array=opt_params))
             logger.info('Pre-trained: {}'.format(self.optimizers[-1]))
 
         self.is_trained = True
