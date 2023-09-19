@@ -72,7 +72,6 @@ Now we get a much higher accuracy rate 95.62%. Not bad.
 ```bash
 [nn.py:179] [INFO] Training ended. Time used: 00:00:19
 [nn.py:186] [INFO] Test started: case_num=10000
-[nn.py:186] [INFO] Test started: case_num=10000
 [nn.py:228] [INFO] Test ended. Time used: 00:00:00
 [nn.py:229] [INFO] correct_rate=0.956200
 ```
