@@ -108,6 +108,8 @@ Now we get a higher accuracy rate 98.01%. A pretty good improvement!
 
 Remember we save models we have trained? We can also load them and train them for more epochs, with some other new optimizer, or even use other data set. In `models` directory, this framework provide some pre-trained model. You can load and use them very easily, without a long time training.
 
+Here show a example for loading a CNN model named `mnist-cnn.npz` to test on MNIST.
+
 ```python
 network = Network(data_set=MnistDataSet())
 network.load_from_file('mnist-cnn.npz')
@@ -115,18 +117,19 @@ network.test(show_mistakes=False)
 ```
 
 ```bash
-Building neural network...
-Adding layer-1: Conv2d => input_shape=(1, 28, 28), kernel_size=5, filter_num=10, stride=2, padding=1, act_func=Relu
-Adding layer-2: Conv2d => input_shape=(10, 13, 13), kernel_size=3, filter_num=20, stride=2, padding=0, act_func=Relu
-Adding layer-3: Linear => input_dim=720, output_dim=256, act_func=Relu
-Adding layer-4: Linear => input_dim=256, output_dim=64, act_func=Relu
-Adding layer-5: Linear => input_dim=64, output_dim=10, act_func=Softmax
-Pre-trained: [mnist] [Adam] max_epoch=50, learning_rate=0.001, batch_size=10, regular_coef=0.001, momentum_coef=0.99, rms_coef=0.999, epsilon=1e-08
-Pre-trained: [kaggle-mnist] [Adam] max_epoch=2, learning_rate=0.001, batch_size=10, regular_coef=0.001, momentum_coef=0.99, rms_coef=0.999, epsilon=1e-08
-Parameters were loaded.
-Test started: case_num=10000
-Test ended. Time used: 00:00:14
-correct_rate=0.992200
+[nn.py:29] [INFO] Seed was set to Network: random_seed=1964
+[nn.py:33] [INFO] Adding layer-1: Conv2d => input_shape=(1, 28, 28), kernel_size=5, filter_num=10, stride=2, padding=1, act_func=Relu
+[nn.py:33] [INFO] Adding layer-2: Conv2d => input_shape=(10, 13, 13), kernel_size=3, filter_num=20, stride=2, padding=0, act_func=Relu
+[nn.py:33] [INFO] Adding layer-3: Linear => input_dim=720, output_dim=256, act_func=Relu
+[nn.py:33] [INFO] Adding layer-4: Linear => input_dim=256, output_dim=64, act_func=Relu
+[nn.py:33] [INFO] Adding layer-5: Linear => input_dim=64, output_dim=10, act_func=Softmax
+[nn.py:345] [INFO] Pre-trained: [mnist] [Adam] max_epoch=50, learning_rate=0.001, batch_size=10, regular_coef=0.001, momentum_coef=0.99, rms_coef=0.999, epsilon=1e-08
+[nn.py:345] [INFO] Pre-trained: [kaggle-mnist] [Adam] max_epoch=2, learning_rate=0.001, batch_size=10, regular_coef=0.001, momentum_coef=0.99, rms_coef=0.999, epsilon=1e-08
+[nn.py:345] [INFO] Pre-trained: [kaggle-mnist] [Adam] max_epoch=10, learning_rate=0.001, batch_size=10, regular_coef=0.001, momentum_coef=0.99, rms_coef=0.999, epsilon=1e-08
+[nn.py:348] [INFO] Parameters were loaded.
+[nn.py:186] [INFO] Test started: case_num=10000
+[nn.py:228] [INFO] Test ended. Time used: 00:00:13
+[nn.py:229] [INFO] correct_rate=0.993700
 ```
 
 Data Set and Pretrained Model
